@@ -8,6 +8,9 @@ from monai.networks.utils import one_hot
 from skimage.filters import gaussian
 from skimage import transform
 import scipy.ndimage.interpolation
+import logging
+
+DEBUGGING = 1
 
 # ==================================================
 # ==================================================
@@ -100,7 +103,7 @@ def transform_images_and_labels(images, labels, data_aug_prob):
     transform_params['sharpen_min'] = 10.0
     transform_params['sharpen_max'] = 30.0
     transform_params['noise_min'] = 0.1
-    transform_params['noise_max'] = 1.0
+    transform_params['noise_max'] = 0.2
     # geometric
     transform_params['trans_min'] = -10.0
     transform_params['trans_max'] = 10.0
@@ -114,38 +117,45 @@ def transform_images_and_labels(images, labels, data_aug_prob):
     transformed_images = np.copy(images)
     transformed_labels = np.copy(labels)
 
+    if DEBUGGING: logging.info("======================== new batch ========================")
     for n in range(n_images):
-        this_image = np.copy(images[n, 0, :, :])
-        this_label = np.copy(labels[n, 0, :, :])
+
+        if DEBUGGING: logging.info("============ new 2d image ============")
 
         # ===================================
         # intensity transformations
         # ===================================
         # 1. gamma contrast
         if np.random.rand() < transform_params['prob']:
-            this_image = gamma(this_image, transform_params)
+            transformed_images[n,0,:,:] = gamma(transformed_images[n,0,:,:], transform_params)
 
         # 2. intensity scaling and shift (brightness)
         if np.random.rand() < transform_params['prob']:
-            this_image = scaleshift(this_image, transform_params)
+            transformed_images[n,0,:,:] = scaleshift(transformed_images[n,0,:,:], transform_params)
 
         # ===================================
         # geometry
         # ===================================
         # 1. translation
         if np.random.rand() < transform_params['prob']:
-            this_image, this_label, tx, ty = translate(this_image, this_label, transform_params)
+            transformed_images[n,0,:,:], transformed_labels[n, 0, :, :], tx, ty = translate(transformed_images[n,0,:,:],
+                                                                                            transformed_labels[n,0,:,:],
+                                                                                            transform_params)
         else:
             tx = 0.0
             ty = 0.0
         # 2. rotation
         if np.random.rand() < transform_params['prob']:
-            this_image, this_label, theta = rotate(this_image, this_label, transform_params)
+            transformed_images[n,0,:,:], transformed_labels[n, 0, :, :], theta = rotate(transformed_images[n,0,:,:],
+                                                                                        transformed_labels[n,0,:,:],
+                                                                                        transform_params)
         else:
             theta = 0.0
         # 3. scaling
         if np.random.rand() < transform_params['prob']:
-            this_image, this_label, sc = scale(this_image, this_label, transform_params)
+            transformed_images[n,0,:,:], transformed_labels[n, 0, :, :], sc = scale(transformed_images[n,0,:,:],
+                                                                                    transformed_labels[n,0,:,:],
+                                                                                    transform_params)
         else:
             sc = 1.0
 
@@ -154,17 +164,14 @@ def transform_images_and_labels(images, labels, data_aug_prob):
         # ===================================
         # 1. blur
         if np.random.rand() < transform_params['prob']:  
-            this_image = blur(this_image, transform_params)
+            transformed_images[n,0,:,:] = blur(transformed_images[n,0,:,:], transform_params)
         # 2. sharpen
         if np.random.rand() < transform_params['prob']:  
-            this_image = sharpen(this_image, transform_params)
+            transformed_images[n,0,:,:] = sharpen(transformed_images[n,0,:,:], transform_params)
         # 3. noise
         if np.random.rand() < transform_params['prob']:  
-            this_image = noise(this_image, transform_params)          
+            transformed_images[n,0,:,:] = noise(transformed_images[n,0,:,:], transform_params)          
             
-    transformed_images[n, 0, :, :] = this_image
-    transformed_labels[n, 0, :, :] = this_label
-
     return transformed_images, transformed_labels, tx, ty, theta, sc
 
 def crop_or_pad(slice, nx, ny):
@@ -190,44 +197,52 @@ def sample_from_uniform(a,b):
 
 def gamma(image, params):
     c = sample_from_uniform(params['gamma_min'], params['gamma_max'])
+    if DEBUGGING == 1: logging.info('doing gamma ' + str(c))
     return image**c
 
 def scaleshift(image, params):
     s = sample_from_uniform(params['int_scale_min'], params['int_scale_max'])
     b = sample_from_uniform(params['bright_min'], params['bright_max'])
+    if DEBUGGING == 1: logging.info('doing scaleshift ' + str(s) + ', ' + str(b))
     return image * s + b
 
 def translate(image, label, params):
     tx = sample_from_uniform(params['trans_min'], params['trans_max'])
     ty = sample_from_uniform(params['trans_min'], params['trans_max'])
+    if DEBUGGING == 1: logging.info('doing translation ' + str(tx) + ', ' + str(ty))
     translated_image = scipy.ndimage.interpolation.shift(image, shift = (tx, ty), order = 1)
     translated_label = scipy.ndimage.interpolation.shift(label, shift = (tx, ty), order = 0)
     return translated_image, translated_label, tx, ty
 
 def rotate(image, label, params):
     theta = sample_from_uniform(params['rot_min'], params['rot_max'])    
-    rotated_image = scipy.ndimage.interpolation.rotate(image, reshape = False, angle = theta, axes = (1, 0), order = 1)
-    rotated_label = scipy.ndimage.interpolation.rotate(label, reshape = False, angle = theta, axes = (1, 0), order = 0)
+    if DEBUGGING == 1: logging.info('doing rotation ' + str(theta))
+    n_x, n_y = image.shape[0], image.shape[1]
+    rotated_image = crop_or_pad(scipy.ndimage.interpolation.rotate(image, reshape = False, angle = theta, axes = (1, 0), order = 1), n_x, n_y)
+    rotated_label = crop_or_pad(scipy.ndimage.interpolation.rotate(label, reshape = False, angle = theta, axes = (1, 0), order = 0), n_x, n_y)
     return rotated_image, rotated_label, theta
 
 def scale(image, label, params):
     s = sample_from_uniform(params['scale_min'], params['scale_max'])
+    if DEBUGGING == 1: logging.info('doing scaling ' + str(s))
     n_x, n_y = image.shape[0], image.shape[1]                
     scaled_image = crop_or_pad(transform.rescale(image, s, order = 1, preserve_range = True, mode = 'constant'), n_x, n_y)
     scaled_label = crop_or_pad(transform.rescale(label, s, order = 0, preserve_range = True, anti_aliasing = False, mode = 'constant'), n_x, n_y)
     return scaled_image, scaled_label, s
 
-def blur(image, params):
+def blur(image, params):   
     k = sample_from_uniform(params['blur_min'], params['blur_min'])
-    gaussian(image, sigma = k)
-    return image
+    if DEBUGGING == 1: logging.info('doing blurring ' + str(k))
+    return gaussian(image, sigma = k)
 
 def sharpen(image, params):
     image1 = blur(image, params)
     image2 = blur(image, params)
     a = sample_from_uniform(params['sharpen_min'], params['sharpen_max'])
+    if DEBUGGING == 1: logging.info('doing sharpening ' + str(a))
     return image1 + (image1 - image2) * a
 
 def noise(image, params):
+    if DEBUGGING == 1: logging.info('adding noise')
     n = np.random.normal(params['noise_min'], params['noise_max'], size = image.shape)
     return image + n

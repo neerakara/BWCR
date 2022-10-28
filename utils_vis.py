@@ -46,3 +46,41 @@ def normalize_img_for_vis(img):
     img[img>1] = 1.0
 
     return (img * 255).astype(np.uint8)
+
+# ==========================================================
+# ==========================================================
+def save_images_and_labels(images1,
+                           labels1,
+                           images2,
+                           labels2,
+                           savefilename,
+                           nc = 6,
+                           nr = 5):
+
+    fig = plt.figure(figsize=(6*nc, 6*nr))
+    for c in range(nc):
+        
+        fig.add_subplot(nr, nc, c + 1, xticks=[], yticks=[])
+        plt.imshow(images1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        
+        fig.add_subplot(nr, nc, nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+
+        fig.add_subplot(nr, nc, 2*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images1[c,0,:,:] - images2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+
+        fig.add_subplot(nr, nc, 3*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        
+        fig.add_subplot(nr, nc, 4*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+
+    plt.savefig(savefilename, bbox_inches='tight', dpi=50)
+    plt.close()
+
+    return 0

@@ -78,14 +78,14 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', default='/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-processed/')
     parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/')
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--max_iterations', default=200001, type=int)
+    parser.add_argument('--max_iterations', default=21, type=int)#200001
     parser.add_argument('--eval_frequency', default=5000, type=int)
     parser.add_argument('--save_frequency', default=20000, type=int)
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--data_aug_prob', default=0.25, type=float)
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--cv_fold_num', default=1, type=int)
-    parser.add_argument('--run_number', default=1, type=int)
+    parser.add_argument('--run_number', default=2, type=int)
     parser.add_argument('--debugging', default=1, type=int)    
     args = parser.parse_args()
 
@@ -122,6 +122,13 @@ if __name__ == "__main__":
     models_path = logging_dir + 'models/'
     if not os.path.exists(models_path):
         os.makedirs(models_path)
+
+    # ===================================
+    # Create a dir for saving vis
+    # ===================================
+    vis_path = logging_dir + 'vis/'
+    if not os.path.exists(vis_path):
+        os.makedirs(vis_path)
 
     # ===================================
     # load image and label
@@ -197,18 +204,21 @@ if __name__ == "__main__":
         # ===================================
         # get a batch of original (pre-processed) training images and labels
         # ===================================
-        inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
+        inputs_, labels_ = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
         # training loss goes to zero when trained on only this batch.
         # inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size, 'sequential', 120)
         if args.debugging == 1:
-            num_fg = utils_data.get_number_of_frames_with_fg(labels)
+            num_fg = utils_data.get_number_of_frames_with_fg(labels_)
             writer.add_scalar("TRAINING/Num_FG_slices", num_fg, iteration+1)
 
         # ===================================
         # do data augmentation / make batches as your method wants them to be
         # ===================================
         if args.data_aug_prob > 0.0:
-            inputs, labels, _, _, _, _ = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
+            inputs, labels, _, _, _, _ = utils_data.transform_images_and_labels(inputs_, labels_, data_aug_prob = args.data_aug_prob)
+            if iteration < 5:
+                savefilename = vis_path + 'iter' + str(iteration) + '.png'
+                utils_vis.save_images_and_labels(inputs_, labels_, inputs, labels, savefilename)
         inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
 
         # for consistency losses (whether at the end or at all layers)
