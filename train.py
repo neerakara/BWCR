@@ -82,11 +82,14 @@ if __name__ == "__main__":
     parser.add_argument('--eval_frequency', default=5000, type=int)
     parser.add_argument('--save_frequency', default=20000, type=int)
     parser.add_argument('--lr', default=0.0001, type=float)
-    parser.add_argument('--data_aug_prob', default=0.25, type=float)
-    parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--data_aug_prob', default=0.5, type=float)
+    parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--cv_fold_num', default=1, type=int)
-    parser.add_argument('--run_number', default=2, type=int)
+    parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=1, type=int)    
+    parser.add_argument('--method_invariance', default=2, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
+    parser.add_argument('--lambda_reg', default=1.0, type=float) # weight for regularization loss
+    parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
     args = parser.parse_args()
 
     # ===================================
@@ -204,23 +207,34 @@ if __name__ == "__main__":
         # ===================================
         # get a batch of original (pre-processed) training images and labels
         # ===================================
-        inputs_, labels_ = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
+        inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
         # training loss goes to zero when trained on only this batch.
         # inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size, 'sequential', 120)
         if args.debugging == 1:
-            num_fg = utils_data.get_number_of_frames_with_fg(labels_)
+            num_fg = utils_data.get_number_of_frames_with_fg(labels)
             writer.add_scalar("TRAINING/Num_FG_slices", num_fg, iteration+1)
 
         # ===================================
         # do data augmentation / make batches as your method wants them to be
         # ===================================
-        if args.data_aug_prob > 0.0:
-            inputs, labels, _, _, _, _ = utils_data.transform_images_and_labels(inputs_, labels_, data_aug_prob = args.data_aug_prob)
+        if args.method_invariance == 1: # data augmentation
+            inputs1, labels1, geom_params1 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
             if iteration < 5:
                 savefilename = vis_path + 'iter' + str(iteration) + '.png'
-                utils_vis.save_images_and_labels(inputs_, labels_, inputs, labels, savefilename)
-        inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
+                utils_vis.save_images_and_labels_orig_and_transformed(inputs, labels, inputs1, labels1, savefilename)
+            inputs1, labels1_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs1, labels1, device, args.num_labels)
 
+        elif args.method_invariance == 2: # consistency loss
+            inputs1, labels1, geom_params1 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
+            inputs2, labels2, geom_params2 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
+            if iteration < 5:
+                savefilename = vis_path + 'iter' + str(iteration) + '.png'
+                utils_vis.save_images_and_labels_orig_and_transformed_two_ways(inputs, labels, inputs1, labels1, inputs2, labels2, savefilename)
+            inputs1, labels1_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs1, labels1, device, args.num_labels)
+            inputs2, labels2_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs2, labels2, device, args.num_labels)
+
+        inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
+        
         # for consistency losses (whether at the end or at all layers)
         # call transform twice
         # inputs1, labels1, tx1, ty1, theta1, sc1 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
@@ -242,25 +256,60 @@ if __name__ == "__main__":
         # pass through model and compute predictions
         # ===================================
         outputs = model(inputs)
-        output_probabilities = torch.nn.Softmax(dim=1)(outputs)
-
-        # ===================================
+        outputs_probabilities = torch.nn.Softmax(dim=1)(outputs)
         # compute loss value for these predictions
-        # ===================================
-        dice_loss = dice_loss_function(output_probabilities, labels_one_hot)
+        dice_loss = dice_loss_function(outputs_probabilities, labels_one_hot)
+        # log loss to the tensorboard
+        writer.add_scalar("TRAINING/DiceLossPerBatch", dice_loss, iteration+1)
 
         # ===================================
-        # also add these scalars to the tensorboard log
+        # add additional regularization losses, according to the chosen method
         # ===================================
-        writer.add_scalar("TRAINING/DiceLossPerBatch", dice_loss, iteration+1)
+        if args.method_invariance == 0: # no regularization
+            total_loss = dice_loss
+        elif args.method_invariance == 1: # data augmentation
+            outputs1 = model(inputs1)
+            outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
+            # loss on data aug samples
+            dice_loss_data_aug = dice_loss_function(outputs1_probabilities, labels1_one_hot)
+            # total loss
+            total_loss = (dice_loss + args.lambda_reg * dice_loss_data_aug) / (1 + args.lambda_reg)
+            writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
+        elif args.method_invariance == 2: # consistency regularization
+            outputs1 = model(inputs1)
+            outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
+            outputs2 = model(inputs2)
+            outputs2_probabilities = torch.nn.Softmax(dim=1)(outputs2)
+            # invert geometric params
+            outputs1_probabilities_inv = utils_data.invert_geometric_transforms(outputs1_probabilities, geom_params1)
+            outputs2_probabilities_inv = utils_data.invert_geometric_transforms(outputs2_probabilities, geom_params2)
+            # check if inversion has happened correctly:
+            if iteration < 5:
+                utils_vis.save_debug(np.copy(inputs.cpu().numpy()),
+                                     np.copy(labels),
+                                     np.copy(inputs1.cpu().numpy()),
+                                     np.copy(labels1),
+                                     np.copy(inputs2.cpu().numpy()),
+                                     np.copy(labels2),
+                                     torch.clone(outputs1_probabilities).detach().cpu().numpy(),
+                                     torch.clone(outputs1_probabilities_inv).detach().cpu().numpy(),
+                                     torch.clone(outputs2_probabilities).detach().cpu().numpy(),
+                                     torch.clone(outputs2_probabilities_inv).detach().cpu().numpy(),
+                                     vis_path + 'preds_iter' + str(iteration) + '.png')
+            # consistency loss
+            dice_loss_consistency = dice_loss_function(outputs1_probabilities_inv, outputs2_probabilities_inv)
+            # total loss
+            total_loss = (dice_loss + args.lambda_reg * dice_loss_consistency) / (1 + args.lambda_reg)
+            writer.add_scalar("TRAINING/ConsistencyLossPerBatch", dice_loss_consistency, iteration+1)
+        writer.add_scalar("TRAINING/TotalLossPerBatch", total_loss, iteration+1)
 
         # ===================================
         # For the last batch after every some epochs, write images, labels and predictions to TB
         # ===================================
         if iteration % 100 == 0:
             writer.add_figure('Training',
-                               utils_vis.show_images_labels_predictions(inputs, labels_one_hot, output_probabilities),
-                               global_step=iteration+1)
+                               utils_vis.show_images_labels_predictions(inputs, labels_one_hot, outputs_probabilities),
+                               global_step = iteration+1)
         
         # ===================================
         # https://pytorch.org/docs/stable/generated/torch.Tensor.backward.html
@@ -269,7 +318,7 @@ if __name__ == "__main__":
         # These are accumulated into x.grad for every parameter x.
         # In pseudo-code: x.grad += dloss/dx
         # ===================================            
-        dice_loss.backward()
+        total_loss.backward()
         
         # ===================================
         # https://discuss.pytorch.org/t/what-does-the-backward-function-do/9944

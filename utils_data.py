@@ -9,6 +9,8 @@ from skimage.filters import gaussian
 from skimage import transform
 import scipy.ndimage.interpolation
 import logging
+import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
 
 DEBUGGING = 1
 
@@ -82,7 +84,9 @@ def make_torch_tensors_and_send_to_device(inputs, labels, device, num_labels):
 # images and labels created by 'get_batch' will be passed to this function
 # [batch_size, num_channels, height, width]
 # ==================================================
-def transform_images_and_labels(images, labels, data_aug_prob):
+def transform_images_and_labels(images,
+                                labels,
+                                data_aug_prob):
     
     # taken from https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8995481
     # Generalizing Deep Learning for Medical Image Segmentation to Unseen Domains via Deep Stacked Transformation, TMI 2020
@@ -91,7 +95,7 @@ def transform_images_and_labels(images, labels, data_aug_prob):
     transform_params['prob'] = data_aug_prob
     # intensity
     transform_params['gamma_min'] = 0.5
-    transform_params['gamma_max'] = 4.5
+    transform_params['gamma_max'] = 2.5
     transform_params['bright_min'] = -0.1
     transform_params['bright_max'] = 0.1
     transform_params['int_scale_min'] = 0.9
@@ -116,6 +120,11 @@ def transform_images_and_labels(images, labels, data_aug_prob):
     n_images = images.shape[0]
     transformed_images = np.copy(images)
     transformed_labels = np.copy(labels)
+    # empty lists for storing geometric transformation parameters
+    txs = []
+    tys = []
+    thetas = []
+    scs = [] 
 
     if DEBUGGING: logging.info("======================== new batch ========================")
     for n in range(n_images):
@@ -138,26 +147,32 @@ def transform_images_and_labels(images, labels, data_aug_prob):
         # ===================================
         # 1. translation
         if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:], transformed_labels[n, 0, :, :], tx, ty = translate(transformed_images[n,0,:,:],
-                                                                                            transformed_labels[n,0,:,:],
-                                                                                            transform_params)
+            transformed_images[n,0,:,:], transformed_labels[n,0,:,:], tx, ty = translate(transformed_images[n,0,:,:],
+                                                                                         transformed_labels[n,0,:,:],
+                                                                                         transform_params)
         else:
             tx = 0.0
             ty = 0.0
         # 2. rotation
         if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:], transformed_labels[n, 0, :, :], theta = rotate(transformed_images[n,0,:,:],
-                                                                                        transformed_labels[n,0,:,:],
-                                                                                        transform_params)
+            transformed_images[n,0,:,:], transformed_labels[n,0,:,:], theta = rotate(transformed_images[n,0,:,:],
+                                                                                     transformed_labels[n,0,:,:],
+                                                                                     transform_params)
         else:
             theta = 0.0
         # 3. scaling
         if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:], transformed_labels[n, 0, :, :], sc = scale(transformed_images[n,0,:,:],
-                                                                                    transformed_labels[n,0,:,:],
-                                                                                    transform_params)
+            transformed_images[n,0,:,:], transformed_labels[n,0,:,:], sc = scale(transformed_images[n,0,:,:],
+                                                                                 transformed_labels[n,0,:,:],
+                                                                                 transform_params)
         else:
             sc = 1.0
+
+        # save geometric transformation parameters for this image
+        txs.append(tx)
+        tys.append(ty)
+        thetas.append(theta)
+        scs.append(sc)
 
         # ===================================
         # image quality
@@ -172,7 +187,13 @@ def transform_images_and_labels(images, labels, data_aug_prob):
         if np.random.rand() < transform_params['prob']:  
             transformed_images[n,0,:,:] = noise(transformed_images[n,0,:,:], transform_params)          
             
-    return transformed_images, transformed_labels, tx, ty, theta, sc
+    geom_params = {}
+    geom_params['trans_x'] = txs
+    geom_params['trans_y'] = tys
+    geom_params['thetas'] = thetas
+    geom_params['scales'] = scs
+
+    return transformed_images, transformed_labels, geom_params
 
 def crop_or_pad(slice, nx, ny):
     x, y = slice.shape
@@ -246,3 +267,18 @@ def noise(image, params):
     if DEBUGGING == 1: logging.info('adding noise')
     n = np.random.normal(params['noise_min'], params['noise_max'], size = image.shape)
     return image + n
+
+# ============================================================
+# invert geometric transformations for each prediction in the batch 
+# ============================================================
+def invert_geometric_transforms(features, geom_params):
+    batch_size = features.shape[0]
+    features_cloned = torch.clone(features)
+    for n in range(batch_size):
+        features_cloned[n,:,:,:] = TF.affine(features[n,:,:,:],
+                                             angle = geom_params['thetas'][n], # scipy and TF do rotation in opposite directions by detault!
+                                             translate = [-geom_params['trans_x'][n], -geom_params['trans_y'][n]],
+                                             scale = 1 / geom_params['scales'][n],
+                                             shear = 0.0,
+                                             interpolation = transforms.InterpolationMode.BILINEAR)
+    return features_cloned

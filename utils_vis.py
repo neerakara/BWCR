@@ -49,36 +49,173 @@ def normalize_img_for_vis(img):
 
 # ==========================================================
 # ==========================================================
-def save_images_and_labels(images1,
-                           labels1,
-                           images2,
-                           labels2,
-                           savefilename,
-                           nc = 6,
-                           nr = 5):
+def save_images_and_labels_orig_and_transformed(images,
+                                                labels,
+                                                images1,
+                                                labels1,
+                                                savefilename,
+                                                nc = 6,
+                                                nr = 5):
 
     fig = plt.figure(figsize=(6*nc, 6*nr))
     for c in range(nc):
         
         fig.add_subplot(nr, nc, c + 1, xticks=[], yticks=[])
-        plt.imshow(images1[c,0,:,:], cmap = 'gray')
+        plt.imshow(images[c,0,:,:], cmap = 'gray')
         plt.colorbar()
+        plt.title('orig image')
         
         fig.add_subplot(nr, nc, nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(images2[c,0,:,:], cmap = 'gray')
+        plt.imshow(images1[c,0,:,:], cmap = 'gray')
         plt.colorbar()
+        plt.title('transformed image')
 
         fig.add_subplot(nr, nc, 2*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(images1[c,0,:,:] - images2[c,0,:,:], cmap = 'gray')
+        plt.imshow(images[c,0,:,:] - images1[c,0,:,:], cmap = 'gray')
         plt.colorbar()
+        plt.title('orig image - transformed image')
 
         fig.add_subplot(nr, nc, 3*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(labels1[c,0,:,:], cmap = 'gray')
+        plt.imshow(labels[c,0,:,:], cmap = 'gray')
         plt.colorbar()
+        plt.title('orig label')
         
         fig.add_subplot(nr, nc, 4*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transformed label')
+
+    plt.savefig(savefilename, bbox_inches='tight', dpi=50)
+    plt.close()
+
+    return 0
+
+def save_images_and_labels_orig_and_transformed_two_ways(images,
+                                                         labels,
+                                                         images1,
+                                                         labels1,
+                                                         images2,
+                                                         labels2,
+                                                         savefilename,
+                                                         nc = 6,
+                                                         nr = 7):
+
+    fig = plt.figure(figsize=(6*nc, 6*nr))
+    
+    for c in range(nc):
+        
+        fig.add_subplot(nr, nc, c + 1, xticks=[], yticks=[])
+        plt.imshow(images[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('orig image')
+        
+        fig.add_subplot(nr, nc, nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 1 image')
+
+        fig.add_subplot(nr, nc, 2*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 2 image')
+
+        fig.add_subplot(nr, nc, 3*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images1[c,0,:,:] - images2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 1 image - transform 2 image')
+
+        fig.add_subplot(nr, nc, 4*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('orig label')
+        
+        fig.add_subplot(nr, nc, 5*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 1 label')
+
+        fig.add_subplot(nr, nc, 6*nc + c + 1, xticks=[], yticks=[])
         plt.imshow(labels2[c,0,:,:], cmap = 'gray')
         plt.colorbar()
+        plt.title('transform 2 label')
+
+    plt.savefig(savefilename, bbox_inches='tight', dpi=50)
+    plt.close()
+
+    return 0
+
+def save_debug(images,
+               labels,
+               images1,
+               labels1,
+               images2,
+               labels2,
+               pred1,
+               pred_inv1,
+               pred2,
+               pred_inv2,
+               savefilename,
+               nc = 6,
+               nr = 11):
+
+    fig = plt.figure(figsize=(6*nc, 6*nr))
+    
+    for c in range(nc):
+        
+        fig.add_subplot(nr, nc, c + 1, xticks=[], yticks=[])
+        plt.imshow(images[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('orig image')
+        
+        fig.add_subplot(nr, nc, nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 1 image')
+
+        fig.add_subplot(nr, nc, 2*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 2 image')
+
+        fig.add_subplot(nr, nc, 3*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(images1[c,0,:,:] - images2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 1 image - transform 2 image')
+
+        fig.add_subplot(nr, nc, 4*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('orig label')
+        
+        fig.add_subplot(nr, nc, 5*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels1[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 1 label')
+
+        fig.add_subplot(nr, nc, 6*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(labels2[c,0,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('transform 2 label')
+
+        fig.add_subplot(nr, nc, 7*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(pred1[c,1,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('pred 1')
+
+        fig.add_subplot(nr, nc, 8*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(pred_inv1[c,1,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('pred 1 inverted')
+
+        fig.add_subplot(nr, nc, 9*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(pred2[c,1,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('pred 2')
+
+        fig.add_subplot(nr, nc, 10*nc + c + 1, xticks=[], yticks=[])
+        plt.imshow(pred_inv2[c,1,:,:], cmap = 'gray')
+        plt.colorbar()
+        plt.title('pred 2 inverted')
 
     plt.savefig(savefilename, bbox_inches='tight', dpi=50)
     plt.close()
