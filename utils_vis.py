@@ -159,65 +159,57 @@ def save_debug(images,
                nr = 11):
 
     fig = plt.figure(figsize=(6*nc, 6*nr))
-    
-    for c in range(nc):
-        
-        fig.add_subplot(nr, nc, c + 1, xticks=[], yticks=[])
-        plt.imshow(images[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('orig image')
-        
-        fig.add_subplot(nr, nc, nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(images1[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('transform 1 image')
-
-        fig.add_subplot(nr, nc, 2*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(images2[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('transform 2 image')
-
-        fig.add_subplot(nr, nc, 3*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(images1[c,0,:,:] - images2[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('transform 1 image - transform 2 image')
-
-        fig.add_subplot(nr, nc, 4*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(labels[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('orig label')
-        
-        fig.add_subplot(nr, nc, 5*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(labels1[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('transform 1 label')
-
-        fig.add_subplot(nr, nc, 6*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(labels2[c,0,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('transform 2 label')
-
-        fig.add_subplot(nr, nc, 7*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(pred1[c,1,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('pred 1')
-
-        fig.add_subplot(nr, nc, 8*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(pred_inv1[c,1,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('pred 1 inverted')
-
-        fig.add_subplot(nr, nc, 9*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(pred2[c,1,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('pred 2')
-
-        fig.add_subplot(nr, nc, 10*nc + c + 1, xticks=[], yticks=[])
-        plt.imshow(pred_inv2[c,1,:,:], cmap = 'gray')
-        plt.colorbar()
-        plt.title('pred 2 inverted')
-
+    for c in range(nc):        
+        makesubplot(fig, nr, nc, c+1, images[c,0,:,:], 'orig image')
+        makesubplot(fig, nr, nc, nc+c+1, images1[c,0,:,:], 'transform 1 image')
+        makesubplot(fig, nr, nc, 2*nc+c+1, images2[c,0,:,:], 'transform 2 image')
+        makesubplot(fig, nr, nc, 3*nc+c+1, images1[c,0,:,:] - images2[c,0,:,:], 'transform 1 image - transform 2 image')
+        makesubplot(fig, nr, nc, 4*nc+c+1, labels[c,0,:,:], 'orig label')
+        makesubplot(fig, nr, nc, 5*nc+c+1, labels1[c,0,:,:], 'transform 1 label')
+        makesubplot(fig, nr, nc, 6*nc+c+1, labels2[c,0,:,:], 'transform 2 label')
+        makesubplot(fig, nr, nc, 7*nc+c+1, pred1[c,0,:,:], 'pred 1')
+        makesubplot(fig, nr, nc, 8*nc+c+1, pred_inv1[c,0,:,:], 'pred 1 inverted')
+        makesubplot(fig, nr, nc, 9*nc+c+1, pred2[c,0,:,:], 'pred 2')
+        makesubplot(fig, nr, nc, 10*nc+c+1, pred_inv2[c,0,:,:], 'pred 2 inverted')
     plt.savefig(savefilename, bbox_inches='tight', dpi=50)
     plt.close()
+    return 0
 
+def save_heads(images,
+               images1,
+               images2,
+               headsl1_1,
+               headsl1_2,
+               headsl2_1,
+               headsl2_2,
+               headsl3_1,
+               headsl3_2,
+               preds1,
+               preds2,
+               savefilename,
+               nc = 6,
+               nr = 11):
+
+    fig = plt.figure(figsize=(6*nc, 6*nr))
+    for c in range(nc):        
+        makesubplot(fig, nr, nc, c+1, images[c,0,:,:], 'orig image')
+        makesubplot(fig, nr, nc, nc+c+1, images1[c,0,:,:], 'transform 1 image')
+        makesubplot(fig, nr, nc, 2*nc+c+1, images2[c,0,:,:], 'transform 2 image')
+        makesubplot(fig, nr, nc, 3*nc+c+1, headsl1_1[c,0,:,:], 'transform 1 layer 1')
+        makesubplot(fig, nr, nc, 4*nc+c+1, headsl1_2[c,0,:,:], 'transform 2 layer 1')
+        makesubplot(fig, nr, nc, 5*nc+c+1, headsl2_1[c,0,:,:], 'transform 1 layer 2')
+        makesubplot(fig, nr, nc, 6*nc+c+1, headsl2_2[c,0,:,:], 'transform 2 layer 2')
+        makesubplot(fig, nr, nc, 7*nc+c+1, headsl3_1[c,0,:,:], 'transform 1 layer 3')
+        makesubplot(fig, nr, nc, 8*nc+c+1, headsl3_2[c,0,:,:], 'transform 2 layer 3')
+        makesubplot(fig, nr, nc, 9*nc+c+1, preds1[c,0,:,:], 'transform 1 pred')
+        makesubplot(fig, nr, nc, 10*nc+c+1, preds2[c,0,:,:], 'transform 2 pred')
+    plt.savefig(savefilename, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+def makesubplot(fig, nr, nc, c, img, title):
+    fig.add_subplot(nr, nc, c, xticks=[], yticks=[])
+    plt.imshow(img, cmap = 'gray')
+    plt.colorbar()
+    plt.title(title)
     return 0

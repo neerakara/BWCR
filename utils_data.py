@@ -106,8 +106,8 @@ def transform_images_and_labels(images,
     transform_params['blur_max'] = 1.5
     transform_params['sharpen_min'] = 10.0
     transform_params['sharpen_max'] = 30.0
-    transform_params['noise_min'] = 0.1
-    transform_params['noise_max'] = 0.2
+    transform_params['noise_min'] = 0.01
+    transform_params['noise_max'] = 0.1
     # geometric
     transform_params['trans_min'] = -10.0
     transform_params['trans_max'] = 10.0
