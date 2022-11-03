@@ -68,6 +68,7 @@ def load_images_and_labels(data_path,
     
     image_paths = []
     label_paths = []
+    depths = []
 
     for n in range(len(sub_ids)):
     
@@ -91,13 +92,18 @@ def load_images_and_labels(data_path,
             print(label_path)
             print(label.shape)
 
-        # squeeze and add to 'images' and 'labels'
+        # squeeze
+        image = np.squeeze(image)
+        label = np.squeeze(label)
+        depths.append(image.shape[-1])
+
+        # add to 'images' and 'labels'
         if n == 0:
-            images = np.squeeze(image)
-            labels = np.squeeze(label)
+            images = image
+            labels = label
         else:
-            images = np.concatenate((images, np.squeeze(image)), axis=-1)
-            labels = np.concatenate((labels, np.squeeze(label)), axis=-1)
+            images = np.concatenate((images, image), axis=-1)
+            labels = np.concatenate((labels, label), axis=-1)
 
         image_paths.append(image_path)
         label_paths.append(label_path)
@@ -105,5 +111,12 @@ def load_images_and_labels(data_path,
         if DEBUGGING == 1:
             print(images.shape)
             print(labels.shape)
+
+    data = {}
+    data['images'] = images
+    data['labels'] = labels
+    data['image_paths'] = image_paths
+    data['label_paths'] = label_paths
+    data['depths'] = depths
     
     return images, labels, image_paths, label_paths

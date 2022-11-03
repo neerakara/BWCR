@@ -151,8 +151,16 @@ if __name__ == "__main__":
     # load image and label
     # ===================================
     logging.info('Reading training and validation data')
-    images_tr, labels_tr, img_paths_tr, lbl_paths_tr = data_loader.load_data(args, 'train')
-    images_vl, labels_vl, img_paths_vl, lbl_paths_vl = data_loader.load_data(args, 'validation')
+    data_tr = data_loader.load_data(args, args.sub_dataset, 'train')
+    data_vl = data_loader.load_data(args, args.sub_dataset, 'validation')
+
+    images_tr = data_tr['images']
+    labels_tr = data_tr['labels']
+    img_paths_tr = data_tr['image_paths']
+
+    images_vl = data_vl['images']
+    labels_vl = data_vl['labels']
+    img_paths_vl = data_vl['image_paths']
 
     if args.debugging == 1:
         logging.info('training images: ' + str(images_tr.shape))

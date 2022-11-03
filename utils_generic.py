@@ -1,3 +1,6 @@
+import os
+import numpy as np
+
 # ======================================================
 # ======================================================
 def make_expdir(args):
@@ -32,3 +35,27 @@ def make_expdir(args):
     logdir = logdir + 'run' + str(args.run_number) + '/'
     
     return logdir
+
+# ======================================================
+# ======================================================
+def get_best_modelpath(models_path, prefix):
+
+    models = os.listdir(models_path)
+    model_iters = []
+
+    for model in models:
+        if prefix in model:
+            a = model.find('iter')
+            b = model.find('.')
+            model_iters.append(int(model[a+4:b]))
+
+    model_iters = np.array(model_iters)
+    latest_iter = np.max(model_iters)
+
+    for model in models:
+        if prefix in model and str(latest_iter) in model:
+            best_model = model
+
+    return models_path + best_model
+
+    

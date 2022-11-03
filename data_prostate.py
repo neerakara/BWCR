@@ -28,7 +28,10 @@ def get_image_and_label_paths(data_path, sub_dataset):
     label_paths = []
     for n in range(sub_ids.shape[0]):
         image_paths.append(sub_dataset_path + 'Case' + str(sub_ids[n]) + '.nii.gz')
-        label_paths.append(sub_dataset_path + 'Case' + str(sub_ids[n]) + '_segmentation.nii.gz')
+        if sub_dataset == 'BMC' or sub_dataset == 'BIDMC':
+            label_paths.append(sub_dataset_path + 'Case' + str(sub_ids[n]) + '_segmentation.nii.gz')
+        else:
+            label_paths.append(sub_dataset_path + 'Case' + str(sub_ids[n]) + '_Segmentation.nii.gz')
 
     return image_paths, label_paths
 
@@ -63,6 +66,9 @@ def get_train_test_val_split_ids(sub_dataset, cv_fold):
     elif sub_dataset == 'UCL': 
         train_test_val_split_ids['test'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
+    elif sub_dataset == 'BIDMC': 
+        train_test_val_split_ids['test'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
     return train_test_val_split_ids
 
 # ==================================================
@@ -81,6 +87,8 @@ def load_images_and_labels(data_path,
     
     image_paths = []
     label_paths = []
+    depths = []
+    subject_names = []
 
     for n in range(len(sub_ids)):
     
@@ -125,9 +133,19 @@ def load_images_and_labels(data_path,
 
         image_paths.append(image_path)
         label_paths.append(label_path)
+        depths.append(image.shape[-1])
+        subject_names.append(image_path[-13:-7])
 
         if DEBUGGING == 1:
             print(images.shape)
             print(labels.shape)
     
-    return images, labels, image_paths, label_paths
+    data = {}
+    data['images'] = images
+    data['labels'] = labels
+    data['image_paths'] = image_paths
+    data['label_paths'] = label_paths
+    data['depths'] = depths
+    data['subject_names'] = subject_names
+
+    return data
