@@ -9,10 +9,12 @@ from skimage.filters import gaussian
 from skimage import transform
 import scipy.ndimage.interpolation
 import logging
+from scipy.ndimage.interpolation import map_coordinates
+from scipy.ndimage.filters import gaussian_filter
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
-DEBUGGING = 1
+DEBUGGING = 0
 
 # ==================================================
 # ==================================================
@@ -69,25 +71,67 @@ def get_number_of_frames_with_fg(y):
             num_fg = num_fg + 1
     return num_fg
 
-def make_torch_tensors_and_send_to_device(inputs, labels, device, num_labels):
-    inputs = torch.from_numpy(inputs)
-    labels = torch.from_numpy(labels)
-    inputs = inputs.to(device, dtype = torch.float)
-    labels = labels.to(device, dtype = torch.float)
+def make_label_onehot(labels, num_labels):
     # https://docs.monai.io/en/stable/_modules/monai/networks/utils.html
     labels_one_hot = one_hot(labels = labels, num_classes = num_labels)
+    return labels_one_hot
 
-    return inputs, labels_one_hot
+def make_torch_tensor_and_send_to_device(array, device):
+    array = torch.from_numpy(array)
+    array = array.to(device, dtype = torch.float)
+    return array
 
 # ==================================================
 # data augmentation
 # images and labels created by 'get_batch' will be passed to this function
 # [batch_size, num_channels, height, width]
 # ==================================================
-def transform_images_and_labels(images,
-                                labels,
-                                data_aug_prob):
+def transform_for_data_aug(images,
+                           labels,
+                           data_aug_prob):
     
+    transform_params = get_transform_params(data_aug_prob)
+    transformed_images = np.copy(images)
+    transformed_labels = np.copy(labels)
+
+    for n in range(images.shape[0]):
+        # geometric transformations
+        transformed_images[n,0,:,:], transformed_labels[n,0,:,:] = apply_geometric_transforms(transformed_images[n,0,:,:],
+                                                                                              transformed_labels[n,0,:,:],
+                                                                                              transform_params)
+        # intensity transformations
+        transformed_images[n,0,:,:] = apply_intensity_transform(transformed_images[n,0,:,:], transform_params)
+            
+    return transformed_images, transformed_labels
+
+# ==================================================
+# data augmentation
+# images and labels created by 'get_batch' will be passed to this function
+# [batch_size, num_channels, height, width]
+# ==================================================
+def transform_for_data_cons(images,
+                            labels,
+                            data_aug_prob):
+    
+    transform_params = get_transform_params(data_aug_prob)
+    transformed_images = np.copy(images)
+    transformed_labels = np.copy(labels)
+    transformed1_images = np.copy(images)
+    transformed2_images = np.copy(images)
+    
+
+    for n in range(images.shape[0]):
+        # geometric transformations
+        transformed_images[n,0,:,:], transformed_labels[n,0,:,:] = apply_geometric_transforms(transformed_images[n,0,:,:],
+                                                                                              transformed_labels[n,0,:,:],
+                                                                                              transform_params)
+        # intensity transformations x 2
+        transformed1_images[n,0,:,:] = apply_intensity_transform(transformed_images[n,0,:,:], transform_params)
+        transformed2_images[n,0,:,:] = apply_intensity_transform(transformed_images[n,0,:,:], transform_params)
+            
+    return transformed1_images, transformed2_images, transformed_labels
+
+def get_transform_params(data_aug_prob):
     # taken from https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8995481
     # Generalizing Deep Learning for Medical Image Segmentation to Unseen Domains via Deep Stacked Transformation, TMI 2020
     transform_params = {}
@@ -115,85 +159,45 @@ def transform_images_and_labels(images,
     transform_params['rot_max'] = 20.0
     transform_params['scale_min'] = 0.4
     transform_params['scale_max'] = 1.6
-    # deformation field | figure out how to do this is an invertible way, with few parameters
+    transform_params['sigma_min'] = 10.0
+    transform_params['sigma_max'] = 13.0
+    transform_params['alpha_min'] = 0.0
+    transform_params['alpha_max'] = 1000.0
 
-    n_images = images.shape[0]
-    transformed_images = np.copy(images)
-    transformed_labels = np.copy(labels)
-    # empty lists for storing geometric transformation parameters
-    txs = []
-    tys = []
-    thetas = []
-    scs = [] 
+    return transform_params
 
-    if DEBUGGING: logging.info("======================== new batch ========================")
-    for n in range(n_images):
+def apply_geometric_transforms(img, lbl, params):
+    # 1. translation
+    if np.random.rand() < params['prob']:
+        img, lbl = translate(img, lbl, params)
+    # 2. rotation
+    if np.random.rand() < params['prob']:
+        img, lbl = rotate(img, lbl, params)
+    # 3. scaling
+    if np.random.rand() < params['prob']:
+        img, lbl = scale(img, lbl, params)
+    # 4. elastic deform
+    if np.random.rand() < params['prob']:
+        img, lbl = elastic_deform(img, lbl, params)
+    return img, lbl
 
-        if DEBUGGING: logging.info("============ new 2d image ============")
-
-        # ===================================
-        # intensity transformations
-        # ===================================
-        # 1. gamma contrast
-        if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:] = gamma(transformed_images[n,0,:,:], transform_params)
-
-        # 2. intensity scaling and shift (brightness)
-        if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:] = scaleshift(transformed_images[n,0,:,:], transform_params)
-
-        # ===================================
-        # geometry
-        # ===================================
-        # 1. translation
-        if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:], transformed_labels[n,0,:,:], tx, ty = translate(transformed_images[n,0,:,:],
-                                                                                         transformed_labels[n,0,:,:],
-                                                                                         transform_params)
-        else:
-            tx = 0.0
-            ty = 0.0
-        # 2. rotation
-        if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:], transformed_labels[n,0,:,:], theta = rotate(transformed_images[n,0,:,:],
-                                                                                     transformed_labels[n,0,:,:],
-                                                                                     transform_params)
-        else:
-            theta = 0.0
-        # 3. scaling
-        if np.random.rand() < transform_params['prob']:
-            transformed_images[n,0,:,:], transformed_labels[n,0,:,:], sc = scale(transformed_images[n,0,:,:],
-                                                                                 transformed_labels[n,0,:,:],
-                                                                                 transform_params)
-        else:
-            sc = 1.0
-
-        # save geometric transformation parameters for this image
-        txs.append(tx)
-        tys.append(ty)
-        thetas.append(theta)
-        scs.append(sc)
-
-        # ===================================
-        # image quality
-        # ===================================
-        # 1. blur
-        if np.random.rand() < transform_params['prob']:  
-            transformed_images[n,0,:,:] = blur(transformed_images[n,0,:,:], transform_params)
-        # 2. sharpen
-        if np.random.rand() < transform_params['prob']:  
-            transformed_images[n,0,:,:] = sharpen(transformed_images[n,0,:,:], transform_params)
-        # 3. noise
-        if np.random.rand() < transform_params['prob']:  
-            transformed_images[n,0,:,:] = noise(transformed_images[n,0,:,:], transform_params)          
-            
-    geom_params = {}
-    geom_params['trans_x'] = txs
-    geom_params['trans_y'] = tys
-    geom_params['thetas'] = thetas
-    geom_params['scales'] = scs
-
-    return transformed_images, transformed_labels, geom_params
+def apply_intensity_transform(img, params):
+    # 1. gamma contrast
+    if np.random.rand() < params['prob']:
+        img = gamma(img, params)
+    # 2. intensity scaling and shift (brightness)
+    if np.random.rand() < params['prob']:
+        img = scaleshift(img, params)
+    # 3. image quality - blur
+    if np.random.rand() < params['prob']:  
+        img = blur(img, params)
+    # 4. image quality - sharpen
+    if np.random.rand() < params['prob']:  
+        img = sharpen(img, params)
+    # 5. image quality - noise
+    if np.random.rand() < params['prob']:  
+        img = noise(img, params)          
+    return img
 
 def crop_or_pad(slice, nx, ny):
     x, y = slice.shape
@@ -233,7 +237,7 @@ def translate(image, label, params):
     if DEBUGGING == 1: logging.info('doing translation ' + str(tx) + ', ' + str(ty))
     translated_image = scipy.ndimage.interpolation.shift(image, shift = (tx, ty), order = 1)
     translated_label = scipy.ndimage.interpolation.shift(label, shift = (tx, ty), order = 0)
-    return translated_image, translated_label, tx, ty
+    return translated_image, translated_label
 
 def rotate(image, label, params):
     theta = sample_from_uniform(params['rot_min'], params['rot_max'])    
@@ -241,7 +245,7 @@ def rotate(image, label, params):
     n_x, n_y = image.shape[0], image.shape[1]
     rotated_image = crop_or_pad(scipy.ndimage.interpolation.rotate(image, reshape = False, angle = theta, axes = (1, 0), order = 1), n_x, n_y)
     rotated_label = crop_or_pad(scipy.ndimage.interpolation.rotate(label, reshape = False, angle = theta, axes = (1, 0), order = 0), n_x, n_y)
-    return rotated_image, rotated_label, theta
+    return rotated_image, rotated_label
 
 def scale(image, label, params):
     s = sample_from_uniform(params['scale_min'], params['scale_max'])
@@ -249,7 +253,7 @@ def scale(image, label, params):
     n_x, n_y = image.shape[0], image.shape[1]                
     scaled_image = crop_or_pad(transform.rescale(image, s, order = 1, preserve_range = True, mode = 'constant'), n_x, n_y)
     scaled_label = crop_or_pad(transform.rescale(label, s, order = 0, preserve_range = True, anti_aliasing = False, mode = 'constant'), n_x, n_y)
-    return scaled_image, scaled_label, s
+    return scaled_image, scaled_label
 
 def blur(image, params):   
     k = sample_from_uniform(params['blur_min'], params['blur_min'])
@@ -267,6 +271,35 @@ def noise(image, params):
     if DEBUGGING == 1: logging.info('adding noise')
     n = np.random.normal(params['noise_min'], params['noise_max'], size = image.shape)
     return image + n
+
+# taken from: https://gist.github.com/erniejunior/601cdf56d2b424757de5 
+def elastic_deform(image, # 2d
+                   label,
+                   params,
+                   random_state=None):
+
+    if random_state is None:
+        random_state = np.random.RandomState(None)
+
+    shape = image.shape
+    sigma = sample_from_uniform(params['sigma_min'], params['sigma_max'])
+    alpha = sample_from_uniform(params['alpha_min'], params['alpha_max'])
+
+    # random_state.rand(*shape) generate an array of image size with random uniform noise between 0 and 1
+    # random_state.rand(*shape)*2 - 1 becomes an array of image size with random uniform noise between -1 and 1
+    # applying the gaussian filter with a relatively large std deviation (~20) makes this a relatively smooth deformation field, but with very small deformation values (~1e-3)
+    # multiplying it with alpha (500) scales this up to a reasonable deformation (max-min:+-10 pixels)
+    # multiplying it with alpha (1000) scales this up to a reasonable deformation (max-min:+-25 pixels)
+    dx = gaussian_filter((random_state.rand(*shape) * 2 - 1), sigma, mode="constant", cval=0) * alpha
+    dy = gaussian_filter((random_state.rand(*shape) * 2 - 1), sigma, mode="constant", cval=0) * alpha
+
+    x, y = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]))
+    indices = np.reshape(y+dy, (-1, 1)), np.reshape(x+dx, (-1, 1))
+
+    distored_image = map_coordinates(image, indices, order=1, mode='reflect').reshape(shape)
+    distored_label = map_coordinates(label, indices, order=0, mode='reflect').reshape(shape)
+    
+    return distored_image, distored_label
 
 # ============================================================
 # invert geometric transformations for each prediction in the batch 

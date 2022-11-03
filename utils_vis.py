@@ -151,12 +151,10 @@ def save_debug(images,
                images2,
                labels2,
                pred1,
-               pred_inv1,
                pred2,
-               pred_inv2,
                savefilename,
                nc = 6,
-               nr = 11):
+               nr = 9):
 
     fig = plt.figure(figsize=(6*nc, 6*nr))
     for c in range(nc):        
@@ -168,9 +166,7 @@ def save_debug(images,
         makesubplot(fig, nr, nc, 5*nc+c+1, labels1[c,0,:,:], 'transform 1 label')
         makesubplot(fig, nr, nc, 6*nc+c+1, labels2[c,0,:,:], 'transform 2 label')
         makesubplot(fig, nr, nc, 7*nc+c+1, pred1[c,0,:,:], 'pred 1')
-        makesubplot(fig, nr, nc, 8*nc+c+1, pred_inv1[c,0,:,:], 'pred 1 inverted')
-        makesubplot(fig, nr, nc, 9*nc+c+1, pred2[c,0,:,:], 'pred 2')
-        makesubplot(fig, nr, nc, 10*nc+c+1, pred_inv2[c,0,:,:], 'pred 2 inverted')
+        makesubplot(fig, nr, nc, 8*nc+c+1, pred2[c,0,:,:], 'pred 2')
     plt.savefig(savefilename, bbox_inches='tight', dpi=50)
     plt.close()
     return 0

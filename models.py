@@ -198,15 +198,15 @@ class UNet2d_with_heads(nn.Module):
         # final conv layer for segmentation (has one conv layer that outputs "num_labels" channels, no non-linearity)
         self.out_conv = OutConvBlock2d(n0, num_labels)
         # helper blocks to define consistency at each layer
-        self.head1 = HeadBlock2d(n0, n0, 1)
-        self.head2 = HeadBlock2d(2*n0, n0, 2)
-        self.head3 = HeadBlock2d(4*n0, n0, 4)
-        self.head4 = HeadBlock2d(8*n0, n0, 8)
-        self.head5 = HeadBlock2d(8*n0, n0, 16)
-        self.head6 = HeadBlock2d(4*n0, n0, 8)
-        self.head7 = HeadBlock2d(2*n0, n0, 4)
-        self.head8 = HeadBlock2d(n0, n0, 2)
-        self.head9 = HeadBlock2d(n0, n0, 1)
+        self.head1 = HeadBlock2d(n0, n0)
+        self.head2 = HeadBlock2d(2*n0, n0)
+        self.head3 = HeadBlock2d(4*n0, n0)
+        self.head4 = HeadBlock2d(8*n0, n0)
+        self.head5 = HeadBlock2d(8*n0, n0)
+        self.head6 = HeadBlock2d(4*n0, n0)
+        self.head7 = HeadBlock2d(2*n0, n0)
+        self.head8 = HeadBlock2d(n0, n0)
+        self.head9 = HeadBlock2d(n0, n0)
         # squeeze
         self.squeeze = squeeze
 
@@ -282,13 +282,12 @@ class UNet2d_with_heads(nn.Module):
 # A convolutional block of the head after which the consistency will be computed
 # ======================================================
 class HeadBlock2d(nn.Module):
-    def __init__(self, in_size, hidden_size, scale_factor):
+    def __init__(self, in_size, hidden_size):
         super(HeadBlock2d, self).__init__()
         self.head = nn.Sequential(nn.Conv2d(in_size, hidden_size, kernel_size=3, padding=1),
                                   nn.BatchNorm2d(hidden_size),
                                   nn.ReLU(inplace=True),
-                                  nn.Conv2d(hidden_size, 1, kernel_size=3, padding=1),
-                                  nn.Upsample(scale_factor=scale_factor, mode='bilinear'))
+                                  nn.Conv2d(hidden_size, 1, kernel_size=3, padding=1))
 
     def forward(self, x):
         x = self.head(x)

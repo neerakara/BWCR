@@ -17,7 +17,7 @@ import models
 import utils_data
 import utils_vis
 import utils_generic
-import data_placenta
+import data_loader
 
 # ======================================================
 # Function used to evaluate entire training / validation sets during training
@@ -44,16 +44,21 @@ def evaluate(args,
         logging.info("Evaluating entire training dataset...")
         n_batches_tr = images_tr.shape[-1] // args.batch_size
         for iteration in range(n_batches_tr):
-            inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size, batch_type = 'sequential', start_idx = iteration * args.batch_size)
-            inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
-            dice_score_tr = dice_score_tr + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs)[-1]), labels_one_hot))
+            inputs_cpu, labels_cpu = utils_data.get_batch(images_tr, labels_tr, args.batch_size, batch_type = 'sequential', start_idx = iteration * args.batch_size)
+            inputs_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs_cpu, device)
+            labels_gpu = utils_data.make_torch_tensor_and_send_to_device(labels_cpu, device)
+            labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
+            # inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
+            dice_score_tr = dice_score_tr + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs_gpu)[-1]), labels_gpu_1hot))
 
         logging.info("Evaluating entire validation dataset...")
         n_batches_vl = images_vl.shape[-1] // args.batch_size
         for iteration in range(n_batches_vl):
-            inputs, labels = utils_data.get_batch(images_vl, labels_vl, args.batch_size, batch_type = 'sequential', start_idx = iteration * args.batch_size)
-            inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
-            dice_score_vl = dice_score_vl + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs)[-1]), labels_one_hot))
+            inputs_cpu, labels_cpu = utils_data.get_batch(images_vl, labels_vl, args.batch_size, batch_type = 'sequential', start_idx = iteration * args.batch_size)
+            inputs_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs_cpu, device)
+            labels_gpu = utils_data.make_torch_tensor_and_send_to_device(labels_cpu, device)
+            labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
+            dice_score_vl = dice_score_vl + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs_gpu)[-1]), labels_gpu_1hot))
     
     # set model back to training mode
     model.train()
@@ -73,24 +78,32 @@ if __name__ == "__main__":
     # read arguments
     # ===================================
     logging.info('Parsing arguments')
+
     parser = argparse.ArgumentParser(description = 'train segmentation model')
-    parser.add_argument('--dataset', default='placenta')
-    parser.add_argument('--data_path', default='/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-processed/')
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/')
-    parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--max_iterations', default=21, type=int)#200001
-    parser.add_argument('--eval_frequency', default=5000, type=int)
-    parser.add_argument('--save_frequency', default=20000, type=int)
-    parser.add_argument('--lr', default=0.0001, type=float)
-    parser.add_argument('--data_aug_prob', default=0.5, type=float)
-    parser.add_argument('--batch_size', default=16, type=int)
+    
+    parser.add_argument('--dataset', default='prostate') # placenta / prostate
+    parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
-    parser.add_argument('--run_number', default=1, type=int)
-    parser.add_argument('--debugging', default=1, type=int)    
-    parser.add_argument('--model_has_heads', default=1, type=int)    
-    parser.add_argument('--method_invariance', default=3, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
-    parser.add_argument('--lambda_reg', default=1.0, type=float) # weight for regularization loss
+    parser.add_argument('--num_labels', default=2, type=int)
+
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/')
+    
+    parser.add_argument('--data_aug_prob', default=0.5, type=float)
+    parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--batch_size', default=16, type=int)
+    parser.add_argument('--max_iterations', default=50001, type=int)
+    parser.add_argument('--eval_frequency', default=5000, type=int)
+    parser.add_argument('--save_frequency', default=10000, type=int)
+    
+    parser.add_argument('--model_has_heads', default=0, type=int)    
+    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
+    parser.add_argument('--lambda_data_aug', default=1.0, type=float) # weight for regularization loss (data augmentation)
+    parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
+    
+    parser.add_argument('--run_number', default=1, type=int)
+    parser.add_argument('--debugging', default=0, type=int)    
+    
     args = parser.parse_args()
 
     # ===================================
@@ -137,9 +150,10 @@ if __name__ == "__main__":
     # ===================================
     # load image and label
     # ===================================
-    logging.info('Reading training data')
-    images_tr, labels_tr, img_paths_tr, lbl_paths_tr = data_placenta.load_images_and_labels(args.data_path, train_test_val = 'train', cv_fold = args.cv_fold_num)
-    images_vl, labels_vl, img_paths_vl, lbl_paths_vl = data_placenta.load_images_and_labels(args.data_path, train_test_val = 'validation', cv_fold = args.cv_fold_num)
+    logging.info('Reading training and validation data')
+    images_tr, labels_tr, img_paths_tr, lbl_paths_tr = data_loader.load_data(args, 'train')
+    images_vl, labels_vl, img_paths_vl, lbl_paths_vl = data_loader.load_data(args, 'validation')
+
     if args.debugging == 1:
         logging.info('training images: ' + str(images_tr.shape))
         logging.info('training labels: ' + str(labels_tr.shape)) # not one hot ... has one channel only
@@ -217,44 +231,41 @@ if __name__ == "__main__":
         # ===================================
         # get a batch of original (pre-processed) training images and labels
         # ===================================
-        inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
-        # training loss goes to zero when trained on only this batch.
-        # inputs, labels = utils_data.get_batch(images_tr, labels_tr, args.batch_size, 'sequential', 120)
-        if args.debugging == 1:
-            num_fg = utils_data.get_number_of_frames_with_fg(labels)
-            writer.add_scalar("TRAINING/Num_FG_slices", num_fg, iteration+1)
+        inputs_cpu, labels_cpu = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
 
         # ===================================
         # do data augmentation / make batches as your method wants them to be
         # ===================================
         if args.method_invariance == 1: # data augmentation
-            inputs1, labels1, geom_params1 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
+            inputs1_cpu, labels1_cpu = utils_data.transform_for_data_aug(inputs_cpu, labels_cpu, data_aug_prob = args.data_aug_prob)
             if iteration < 5:
                 savefilename = vis_path + 'iter' + str(iteration) + '.png'
-                utils_vis.save_images_and_labels_orig_and_transformed(inputs, labels, inputs1, labels1, savefilename)
-            inputs1, labels1_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs1, labels1, device, args.num_labels)
+                utils_vis.save_images_and_labels_orig_and_transformed(inputs_cpu, labels_cpu,
+                                                                      inputs1_cpu, labels1_cpu,
+                                                                      savefilename)
 
         elif args.method_invariance == 2 or args.method_invariance == 3: # consistency loss
-            inputs1, labels1, geom_params1 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
-            inputs2, labels2, geom_params2 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
+            inputs1_cpu, inputs2_cpu, labels1_cpu = utils_data.transform_for_data_cons(inputs_cpu, labels_cpu, data_aug_prob = args.data_aug_prob)
             if iteration < 5:
                 savefilename = vis_path + 'iter' + str(iteration) + '.png'
-                utils_vis.save_images_and_labels_orig_and_transformed_two_ways(inputs, labels, inputs1, labels1, inputs2, labels2, savefilename)
-            inputs1, labels1_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs1, labels1, device, args.num_labels)
-            inputs2, labels2_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs2, labels2, device, args.num_labels)
+                utils_vis.save_images_and_labels_orig_and_transformed_two_ways(inputs_cpu, labels_cpu,
+                                                                               inputs1_cpu, labels1_cpu,
+                                                                               inputs2_cpu, labels1_cpu,
+                                                                               savefilename)
 
-        inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
-        
-        # for consistency losses (whether at the end or at all layers)
-        # call transform twice
-        # inputs1, labels1, tx1, ty1, theta1, sc1 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
-        # inputs2, labels2, tx2, ty2, theta2, sc2 = utils_data.transform_images_and_labels(inputs, labels, data_aug_prob = args.data_aug_prob)
-        # cons_loss = cons_loss_function(model(inputs1), model(inputs2), tx1, ty1, theta1, sc1, tx2, ty2, theta2, sc2)
-
-        # for implementing layer-wise losses, understand how the 'forward' function in the model works.
-        # currenly, it seems to be running when outputs = model(inputs) is called
-        # figure out how to query multiple layer features from it
-        
+        # ===================================
+        # send stuff to gpu
+        # ===================================
+        inputs_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs_cpu, device)
+        labels_gpu = utils_data.make_torch_tensor_and_send_to_device(labels_cpu, device)
+        labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
+        if args.method_invariance != 0:
+            inputs1_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs1_cpu, device)
+            labels1_gpu = utils_data.make_torch_tensor_and_send_to_device(labels1_cpu, device)
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
+        if args.method_invariance == 2 or args.method_invariance == 3:
+            inputs2_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs2_cpu, device)
+                
         # ===================================
         # https://discuss.pytorch.org/t/what-does-the-backward-function-do/9944
         # optimizer.zero_grad() clears x.grad for every parameter x in the optimizer.
@@ -265,11 +276,11 @@ if __name__ == "__main__":
         # ===================================
         # pass through model and compute predictions
         # ===================================
-        model_outputs = model(inputs)
+        model_outputs = model(inputs_gpu)
         outputs = model_outputs[-1]
         outputs_probabilities = torch.nn.Softmax(dim=1)(outputs)
         # compute loss value for these predictions
-        dice_loss = dice_loss_function(outputs_probabilities, labels_one_hot)
+        dice_loss = dice_loss_function(outputs_probabilities, labels_gpu_1hot)
         # log loss to the tensorboard
         writer.add_scalar("TRAINING/DiceLossPerBatch", dice_loss, iteration+1)
 
@@ -281,121 +292,110 @@ if __name__ == "__main__":
         
         elif args.method_invariance == 1: # data augmentation
         
-            model_outputs1 = model(inputs1)
+            model_outputs1 = model(inputs1_gpu)
             outputs1 = model_outputs1[-1]
             outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
         
             # loss on data aug samples
-            dice_loss_data_aug = dice_loss_function(outputs1_probabilities, labels1_one_hot)
+            dice_loss_data_aug = dice_loss_function(outputs1_probabilities, labels1_gpu_1hot)
         
             # total loss
-            total_loss = (dice_loss + args.lambda_reg * dice_loss_data_aug) / (1 + args.lambda_reg)
+            total_loss = (dice_loss + args.lambda_data_aug * dice_loss_data_aug) / (1 + args.lambda_data_aug)
             writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
         
         elif args.method_invariance == 2: # consistency regularization
         
-            model_outputs1 = model(inputs1)
+            model_outputs1 = model(inputs1_gpu)
             outputs1 = model_outputs1[-1]
             outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
-            model_outputs2 = model(inputs2)
+            model_outputs2 = model(inputs2_gpu)
             outputs2 = model_outputs2[-1]
             outputs2_probabilities = torch.nn.Softmax(dim=1)(outputs2)
         
-            # invert geometric params
-            outputs1_probabilities_inv = utils_data.invert_geometric_transforms(outputs1_probabilities, geom_params1)
-            outputs2_probabilities_inv = utils_data.invert_geometric_transforms(outputs2_probabilities, geom_params2)
-        
             # check if inversion has happened correctly:
             if iteration < 5:
-                utils_vis.save_debug(np.copy(inputs.cpu().numpy()),
-                                     np.copy(labels),
-                                     np.copy(inputs1.cpu().numpy()),
-                                     np.copy(labels1),
-                                     np.copy(inputs2.cpu().numpy()),
-                                     np.copy(labels2),
+                utils_vis.save_debug(inputs_cpu,
+                                     labels_cpu,
+                                     inputs1_cpu,
+                                     labels1_cpu,
+                                     inputs2_cpu,
+                                     labels1_cpu,
                                      torch.clone(outputs1_probabilities).detach().cpu().numpy(),
-                                     torch.clone(outputs1_probabilities_inv).detach().cpu().numpy(),
                                      torch.clone(outputs2_probabilities).detach().cpu().numpy(),
-                                     torch.clone(outputs2_probabilities_inv).detach().cpu().numpy(),
                                      vis_path + 'preds_iter' + str(iteration) + '.png')
         
             # consistency loss
-            dice_loss_consistency = dice_loss_function(outputs1_probabilities_inv, outputs2_probabilities_inv)
+            dice_loss_consistency = dice_loss_function(outputs1_probabilities, outputs2_probabilities)
         
             # total loss
-            total_loss = (dice_loss + args.lambda_reg * dice_loss_consistency) / (1 + args.lambda_reg)
+            total_loss = (dice_loss + args.lambda_reg_consis * dice_loss_consistency) / (1 + args.lambda_reg_consis)
             writer.add_scalar("TRAINING/ConsistencyLossPerBatch", dice_loss_consistency, iteration+1)
         
         elif args.method_invariance == 3: # consistency regularization at each layer
         
             # make sure you are using a model with heads
-            model_outputs1 = model(inputs1)
+            model_outputs1 = model(inputs1_gpu)
             outputs1 = model_outputs1[-1]
             outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
-            model_outputs2 = model(inputs2)
+            model_outputs2 = model(inputs2_gpu)
             outputs2 = model_outputs2[-1]
             outputs2_probabilities = torch.nn.Softmax(dim=1)(outputs2)
-        
-            # invert geometric params
-            outputs1_probabilities_inv = utils_data.invert_geometric_transforms(outputs1_probabilities, geom_params1)
-            outputs2_probabilities_inv = utils_data.invert_geometric_transforms(outputs2_probabilities, geom_params2)
-        
+                
             # get output of heads
             heads1 = model_outputs1[0:-1]
             heads2 = model_outputs2[0:-1]
         
-            # invert geometric transformations in heads
-            heads1_inv = []
-            heads2_inv = []
-            for h in range(len(heads1)):
-                heads1_inv.append(utils_data.invert_geometric_transforms(torch.clone(heads1[h]), geom_params1))
-                heads2_inv.append(utils_data.invert_geometric_transforms(torch.clone(heads2[h]), geom_params2))
-        
             # vis outputs of heads
             if iteration < 5:
-                utils_vis.save_heads(np.copy(inputs.cpu().numpy()),
-                                     np.copy(inputs1.cpu().numpy()),
-                                     np.copy(inputs2.cpu().numpy()),
-                                     torch.clone(heads1_inv[0]).detach().cpu().numpy(),
-                                     torch.clone(heads2_inv[0]).detach().cpu().numpy(),
-                                     torch.clone(heads1_inv[1]).detach().cpu().numpy(),
-                                     torch.clone(heads2_inv[1]).detach().cpu().numpy(),
-                                     torch.clone(heads1_inv[2]).detach().cpu().numpy(),
-                                     torch.clone(heads2_inv[2]).detach().cpu().numpy(),
-                                     torch.clone(outputs1_probabilities_inv).detach().cpu().numpy(),
-                                     torch.clone(outputs2_probabilities_inv).detach().cpu().numpy(),
+                utils_vis.save_heads(inputs_cpu,
+                                     inputs1_cpu,
+                                     inputs2_cpu,
+                                     torch.clone(heads1[0]).detach().cpu().numpy(),
+                                     torch.clone(heads2[0]).detach().cpu().numpy(),
+                                     torch.clone(heads1[1]).detach().cpu().numpy(),
+                                     torch.clone(heads2[1]).detach().cpu().numpy(),
+                                     torch.clone(heads1[2]).detach().cpu().numpy(),
+                                     torch.clone(heads2[2]).detach().cpu().numpy(),
+                                     torch.clone(outputs1_probabilities).detach().cpu().numpy(),
+                                     torch.clone(outputs2_probabilities).detach().cpu().numpy(),
                                      vis_path + 'heads_iter' + str(iteration) + '.png')
             
             # consistency loss at each layer
-            cons_l1 = cons_loss_function(heads1_inv[0], heads2_inv[0])
-            cons_l2 = cons_loss_function(heads1_inv[1], heads2_inv[1])
-            cons_l3 = cons_loss_function(heads1_inv[2], heads2_inv[2])
-            cons_l4 = cons_loss_function(heads1_inv[3], heads2_inv[3])
-            cons_l5 = cons_loss_function(heads1_inv[4], heads2_inv[4])
-            cons_l6 = cons_loss_function(heads1_inv[5], heads2_inv[5])
-            cons_l7 = cons_loss_function(heads1_inv[6], heads2_inv[6])
-            cons_l8 = cons_loss_function(heads1_inv[7], heads2_inv[7])
-            cons_l9 = cons_loss_function(heads1_inv[8], heads2_inv[8])
+            cons_l1 = cons_loss_function(heads1[0], heads2[0])
+            cons_l2 = cons_loss_function(heads1[1], heads2[1])
+            cons_l3 = cons_loss_function(heads1[2], heads2[2])
+            cons_l4 = cons_loss_function(heads1[3], heads2[3])
+            cons_l5 = cons_loss_function(heads1[4], heads2[4])
+            cons_l6 = cons_loss_function(heads1[5], heads2[5])
+            cons_l7 = cons_loss_function(heads1[6], heads2[6])
+            cons_l8 = cons_loss_function(heads1[7], heads2[7])
+            cons_l9 = cons_loss_function(heads1[8], heads2[8])
             
             # weights for the loss at each layer
-            alpha1 = args.lambda_reg * ((1 / 9) ** args.alpha_layer)
-            alpha2 = args.lambda_reg * ((2 / 9) ** args.alpha_layer)
-            alpha3 = args.lambda_reg * ((3 / 9) ** args.alpha_layer)
-            alpha4 = args.lambda_reg * ((4 / 9) ** args.alpha_layer)
-            alpha5 = args.lambda_reg * ((5 / 9) ** args.alpha_layer)
-            alpha6 = args.lambda_reg * ((6 / 9) ** args.alpha_layer)
-            alpha7 = args.lambda_reg * ((7 / 9) ** args.alpha_layer)
-            alpha8 = args.lambda_reg * ((8 / 9) ** args.alpha_layer)
-            alpha9 = args.lambda_reg * ((9 / 9) ** args.alpha_layer)
+            alpha1 = args.lambda_consis * ((1 / 9) ** args.alpha_layer)
+            alpha2 = args.lambda_consis * ((2 / 9) ** args.alpha_layer)
+            alpha3 = args.lambda_consis * ((3 / 9) ** args.alpha_layer)
+            alpha4 = args.lambda_consis * ((4 / 9) ** args.alpha_layer)
+            alpha5 = args.lambda_consis * ((5 / 9) ** args.alpha_layer)
+            alpha6 = args.lambda_consis * ((6 / 9) ** args.alpha_layer)
+            alpha7 = args.lambda_consis * ((7 / 9) ** args.alpha_layer)
+            alpha8 = args.lambda_consis * ((8 / 9) ** args.alpha_layer)
+            alpha9 = args.lambda_consis * ((9 / 9) ** args.alpha_layer)
 
             # total consistency loss
-            dice_loss_consistency = alpha1 * cons_l1 + alpha2 * cons_l2 + alpha3 * cons_l3 + alpha4 * cons_l4 + \
+            loss_consistency = alpha1 * cons_l1 + alpha2 * cons_l2 + alpha3 * cons_l3 + alpha4 * cons_l4 + \
                             alpha5 * cons_l5 + alpha6 * cons_l6 + alpha7 * cons_l7 + alpha8 * cons_l8 + alpha9 * cons_l9
-            total_lambda = alpha1 + alpha2 + alpha3 + alpha4 + alpha5 + alpha6 + alpha7 + alpha8 + alpha9
+            lambda_consis = alpha1 + alpha2 + alpha3 + alpha4 + alpha5 + alpha6 + alpha7 + alpha8 + alpha9
+
+            # loss on data aug samples
+            dice_loss_data_aug = dice_loss_function(outputs1_probabilities, labels1_gpu_1hot)
             
             # total loss
-            total_loss = (dice_loss + total_lambda * dice_loss_consistency) / (1 + total_lambda)
-            writer.add_scalar("TRAINING/ConsistencyLossPerBatch", dice_loss_consistency, iteration+1)
+            total_loss = (dice_loss + args.lambda_data_aug * dice_loss_data_aug + lambda_consis * loss_consistency) / (1 + lambda_consis + args.lambda_data_aug)
+            
+            # tensorboard
+            writer.add_scalar("TRAINING/ConsistencyLossPerBatch", loss_consistency, iteration+1)
+            writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
         
         writer.add_scalar("TRAINING/TotalLossPerBatch", total_loss, iteration+1)
 
@@ -404,8 +404,18 @@ if __name__ == "__main__":
         # ===================================
         if iteration % 100 == 0:
             writer.add_figure('Training',
-                               utils_vis.show_images_labels_predictions(inputs, labels_one_hot, outputs_probabilities),
+                               utils_vis.show_images_labels_predictions(inputs_gpu, labels_gpu_1hot, outputs_probabilities),
                                global_step = iteration+1)
+
+            if args.method_invariance != 0:
+                writer.add_figure('TrainingTransformed1',
+                                   utils_vis.show_images_labels_predictions(inputs1_gpu, labels1_gpu_1hot, outputs1_probabilities),
+                                   global_step = iteration+1)
+
+            if args.method_invariance == 2 or args.method_invariance == 3:
+                writer.add_figure('TrainingTransformed2',
+                                   utils_vis.show_images_labels_predictions(inputs2_gpu, labels1_gpu_1hot, outputs2_probabilities),
+                                   global_step = iteration+1)
         
         # ===================================
         # https://pytorch.org/docs/stable/generated/torch.Tensor.backward.html
