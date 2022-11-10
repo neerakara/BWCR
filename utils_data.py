@@ -43,12 +43,12 @@ def get_batch(images,
               batch_type = 'random',
               start_idx = -1):
 
-    num_slices = images.shape[-1]
-
     if batch_type == 'sequential' and start_idx != -1:
         batch_indices = np.linspace(start_idx, start_idx + batch_size - 1, batch_size).astype(np.uint8)
     elif batch_type == 'random':
-        batch_indices = np.random.randint(0, num_slices, batch_size)
+        n_slices = images.shape[-1]
+        random_indices = np.random.permutation(n_slices)
+        batch_indices = np.sort(random_indices[:batch_size])
 
     x_batch = images[:, :, batch_indices]
     y_batch = labels[:, :, batch_indices]

@@ -154,13 +154,13 @@ if __name__ == "__main__":
     data_tr = data_loader.load_data(args, args.sub_dataset, 'train')
     data_vl = data_loader.load_data(args, args.sub_dataset, 'validation')
 
-    images_tr = data_tr['images']
-    labels_tr = data_tr['labels']
-    img_paths_tr = data_tr['image_paths']
+    images_tr = data_tr["images"]
+    labels_tr = data_tr["labels"]
+    subject_names_tr = data_tr["subject_names"]
 
-    images_vl = data_vl['images']
-    labels_vl = data_vl['labels']
-    img_paths_vl = data_vl['image_paths']
+    images_vl = data_vl["images"]
+    labels_vl = data_vl["labels"]
+    subject_names_vl = data_vl["subject_names"]
 
     if args.debugging == 1:
         logging.info('training images: ' + str(images_tr.shape))
@@ -170,14 +170,16 @@ if __name__ == "__main__":
         logging.info(np.min(images_tr))
         logging.info(np.max(labels_tr))
         logging.info(np.unique(labels_tr))
-        logging.info('training images')
-        for img_path in img_paths_tr:
-            logging.info(img_path[img_path.rfind('/'):])
+        logging.info('training subject names')
+        n_training_images = subject_names_tr.shape[0]
+        for n in range(n_training_images):
+            logging.info(subject_names_tr[n])
         logging.info('validation images: ' + str(images_vl.shape))
         logging.info('validation labels: ' + str(labels_vl.shape)) # not one hot ... has one channel only
-        logging.info('validation images')
-        for img_path in img_paths_vl:
-            logging.info(img_path[img_path.rfind('/'):])
+        logging.info('validation subject names')
+        n_validation_images = subject_names_vl.shape[0]
+        for n in range(n_validation_images):
+            logging.info(subject_names_vl[n])
 
     # ===================================
     # define model

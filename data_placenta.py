@@ -56,9 +56,9 @@ def get_train_test_val_split_ids(cv_fold):
 # ==================================================
 # Loads the image / label from the source file (e.g. nii) as a numpy array
 # ==================================================
-def load_images_and_labels(data_path,
-                           train_test_val = 'train',
-                           cv_fold = 1):
+def load_dataset(data_path,
+                 train_test_val = 'train',
+                 cv_fold = 1):
 
     image_paths_all, label_paths_all = get_image_and_label_paths(data_path)
     

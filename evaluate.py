@@ -125,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--batch_size_test', default=8, type=int)
+    parser.add_argument('--batch_size_test', default=4, type=int)
     
     parser.add_argument('--model_has_heads', default=0, type=int)    
     parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
@@ -166,10 +166,10 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Reading test data')
     data_test = data_loader.load_data(args, args.test_sub_dataset, 'test')
-    images_ts = data_test['images']
-    labels_ts = data_test['labels']
-    depths_ts = data_test['depths']
-    subject_names_ts = data_test['subject_names']
+    images_ts = data_test["images"]
+    labels_ts = data_test["labels"]
+    depths_ts = data_test["depths"]
+    subject_names_ts = data_test["subject_names"]
 
     # ===================================
     # define model
