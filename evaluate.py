@@ -164,6 +164,7 @@ if __name__ == "__main__":
     # ===================================
     # load test images and labels
     # ===================================
+    logging.info('Evaluation experiment: ' + logging_dir)
     logging.info('Reading test data')
     data_test = data_loader.load_data(args, args.test_sub_dataset, 'test')
     images_ts = data_test["images"]
@@ -201,10 +202,11 @@ if __name__ == "__main__":
     # ===================================
     # evaluate each subject one by one
     # ===================================
-    logging.info('number of test subjects: ' + str(len(subject_names_ts)))
+    num_subjects_ts = subject_names_ts.shape[0]
+    logging.info('number of test subjects: ' + str(num_subjects_ts))
     logging.info('depth dimensions of these test subjects: ' + str(depths_ts))
     subject_dices = []
-    for sub in range(len(subject_names_ts)):
+    for sub in range(num_subjects_ts):
         subject_name = subject_names_ts[sub]
         logging.info(subject_name)
         sub_start = int(np.sum(depths_ts[:sub]))

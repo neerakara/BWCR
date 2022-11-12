@@ -9,7 +9,7 @@ import logging
 import gc
 import h5py
 
-DEBUGGING = 0
+DEBUGGING = 1
 
 # ==================================================
 # get image and label paths
@@ -107,9 +107,11 @@ def prepare_dataset(data_orig_path,
     hdf5_file = h5py.File(output_file, "w")
 
     # get paths of all images and labels for this subdataset
+    if DEBUGGING == 1: logging.info('Reading image and label paths...')
     image_paths_all, label_paths_all = get_image_and_label_paths(data_orig_path, sub_dataset)
 
     # get ids for this train / test / validation split
+    if DEBUGGING == 1: logging.info('Getting ids of subjects to be read...')
     train_test_val_split_ids = get_train_test_val_split_ids(sub_dataset, cv_fold)
     sub_ids = train_test_val_split_ids[train_test_val]
     
@@ -119,6 +121,7 @@ def prepare_dataset(data_orig_path,
     data = {}
 
     # count number of slices to pre-define dataset size
+    if DEBUGGING == 1: logging.info('Counting dataset size...')
     images_size = count_total_size(image_paths_all,
                                    sub_ids)
 

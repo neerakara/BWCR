@@ -19,6 +19,11 @@ import utils_vis
 import utils_generic
 import data_loader
 
+# import psutil
+# import nvidia_smi
+# nvidia_smi.nvmlInit()
+# deviceCount = nvidia_smi.nvmlDeviceGetCount()
+
 # ======================================================
 # Function used to evaluate entire training / validation sets during training
 # ======================================================
@@ -118,11 +123,17 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Finding out which device I am running on')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
+    logging.info("Using device: " + str(device))
+    logging.info("Number of devices: " + str(torch.cuda.device_count()))
+    # All the available GPUs are being used!
+    # It’s natural to execute your forward, backward propagations on multiple GPUs.
+    # However, Pytorch will only use one GPU by default.
+    # You can easily run your operations on multiple GPUs by making your model run parallelly using DataParallel.
 
     # ===================================
     # ===================================
     logging_dir = utils_generic.make_expdir(args)
+    logging.info('EXPERIMENT NAME: ' + logging_dir)
 
     # ===================================
     # Create a summary writer
@@ -131,6 +142,8 @@ if __name__ == "__main__":
     summary_path = logging_dir + 'summary/'
     if not os.path.exists(summary_path):
         os.makedirs(summary_path)
+    # wandb.tensorboard.patch(root_logdir=summary_path)
+    # wandb.init()
     writer = SummaryWriter(summary_path)
 
     # ===================================
@@ -194,6 +207,9 @@ if __name__ == "__main__":
                               num_labels = args.num_labels,
                               squeeze = False)
     model = model.to(device)
+    
+    # net = torch.nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
+
     # RuntimeError: CUDA error: out of memory
     # CUDA kernel errors might be asynchronously reported at some other API call,so the stacktrace below might be incorrect.
     # For debugging consider passing CUDA_LAUNCH_BLOCKING=1.
@@ -234,6 +250,20 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Starting training iterations')
     for iteration in range(args.max_iterations):
+
+        # # tracking cpu and gpu utilization
+        # info0 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(0))
+        # info1 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(1))
+        # info2 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(2))
+        # info3 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(3))
+        # usage0 = 100*info0.free/info0.total
+        # usage1 = 100*info1.free/info1.total
+        # usage2 = 100*info2.free/info2.total
+        # usage3 = 100*info3.free/info3.total
+        # writer.add_scalar("Utilization/GPU0", usage0, iteration+1)
+        # writer.add_scalar("Utilization/GPU1", usage1, iteration+1)
+        # writer.add_scalar("Utilization/GPU2", usage2, iteration+1)
+        # writer.add_scalar("Utilization/GPU3", usage3, iteration+1)
 
         if iteration % args.eval_frequency == 0:
             logging.info('Training iteration ' + str(iteration + 1) + '...')
@@ -481,3 +511,5 @@ if __name__ == "__main__":
         # flush all summaries to tensorboard
         # ===================================
         writer.flush()
+
+    nvidia_smi.nvmlShutdown()

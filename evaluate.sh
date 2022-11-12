@@ -8,9 +8,10 @@
 ## SLURM Variables:
 #SBATCH  --output=/data/scratch/nkarani/logs/%j.out
 #SBATCH  --partition=gpu
-#SBATCH  --exclude=anise,curcum,sumac
+#SBATCH  --exclude=anise,curcum,sumac,fennel,rosemary,urfa-biber,marjoram,mint
 #SBATCH  --gres=gpu:1
-#SBATCH  --mem=12G
+#SBATCH  --cpus-per-task=8
+#SBATCH  --mem=16G
 #SBATCH  --time=02:00:00
 #SBATCH  --priority='TOP'
 
@@ -19,14 +20,14 @@ source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
 ## EXECUTION OF PYTHON CODE:
 python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
---cv_fold_num 1 \
+--cv_fold_num 2 \
 --run_num 1 \
 --test_sub_dataset 'BIDMC' \
 --model_has_heads 1 \
 --method_invariance 3 \
 --lambda_data_aug 1.0 \
 --lambda_consis 1.0 \
---alpha_layer 0.1
+--alpha_layer 100.0
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

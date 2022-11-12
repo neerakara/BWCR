@@ -18,8 +18,8 @@ def load_data(args,
 
     elif args.dataset == 'prostate':
         data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/' # orig data is here
-        # data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
-        data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
+        data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
+        # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
         data = data_prostate.load_dataset(data_orig_path,
                                           data_proc_path,
                                           sub_dataset,
