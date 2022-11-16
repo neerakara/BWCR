@@ -12,6 +12,56 @@ import skimage.segmentation
 
 # ==========================================================
 # ==========================================================
+def save_images_labels(images,
+                       labels,
+                       savepath):
+    
+    plt.figure(figsize=(12, 24))
+    k=-1
+    # show 4 examples per batch
+    for batch_index in range(4):
+        plt.subplot(4, 2, 2*batch_index + 1, xticks=[], yticks=[])
+        plt.imshow(np.rot90(normalize_img_for_vis(images[batch_index,:,:]),k), cmap = 'gray')
+        plt.subplot(4, 2, 2*batch_index + 2, xticks=[], yticks=[])
+        plt.imshow(np.rot90(normalize_img_for_vis(labels[batch_index,:,:]),k), cmap = 'gray')
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+# ==========================================================
+# ==========================================================
+def save_images_labels_predictions_soft_and_hard(images,
+                                                 labels,
+                                                 soft_predictions,
+                                                 savepath):
+
+    plt.figure(figsize=(24, 24))
+    
+    tmp_images = np.copy(images.cpu().numpy())
+    tmp_labels = np.copy(labels.cpu().numpy())
+    tmp_predictions_soft = np.copy(soft_predictions.detach().cpu().numpy())
+    tmp_predictions_soft_tmp = np.copy(tmp_predictions_soft)
+    tmp_predictions_hard = (tmp_predictions_soft_tmp[:, 1, :, :] > 0.5).astype(np.float16)
+
+    # show 4 examples per batch
+    for batch_index in range(4):
+        k=-1
+        im = np.rot90(normalize_img_for_vis(tmp_images[batch_index,0,:,:]), k)
+        lb = np.rot90(normalize_img_for_vis(tmp_labels[batch_index,1,:,:]), k)
+        prs = np.rot90(normalize_img_for_vis(tmp_predictions_soft[batch_index,1,:,:]), k)
+        prh = np.rot90(normalize_img_for_vis(tmp_predictions_hard[batch_index,:,:]), k)
+
+        plt.subplot(4, 4, 4*batch_index + 1, xticks=[], yticks=[]); plt.imshow(im, cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 4, 4*batch_index + 2, xticks=[], yticks=[]); plt.imshow(lb, cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 4, 4*batch_index + 3, xticks=[], yticks=[]); plt.imshow(prs, cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 4, 4*batch_index + 4, xticks=[], yticks=[]); plt.imshow(prh, cmap = 'gray'); plt.colorbar()
+
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    
+    return 0
+
+# ==========================================================
+# ==========================================================
 def show_images_labels_predictions(images,
                                    labels,
                                    soft_predictions):
@@ -32,6 +82,25 @@ def show_images_labels_predictions(images,
         plt.imshow(normalize_img_for_vis(tmp_predictions[batch_index,1,:,:]), cmap = 'gray')
 
     return fig
+
+# ==========================================================
+# ==========================================================
+def save_images_and_labels(images,
+                           labels,
+                           savefilename):
+    
+    plt.figure(figsize=(12, 24))
+    tmp_images = images.detach().cpu().numpy()
+    tmp_labels = labels.detach().cpu().numpy()
+    # show 4 examples per batch
+    for batch_index in range(4):
+        plt.subplot(4, 2, 2*batch_index + 1, xticks=[], yticks=[])
+        plt.imshow(normalize_img_for_vis(tmp_images[batch_index,0,:,:]), cmap = 'gray')
+        plt.subplot(4, 2, 2*batch_index + 2, xticks=[], yticks=[])
+        plt.imshow(normalize_img_for_vis(tmp_labels[batch_index,0,:,:]), cmap = 'gray')
+    plt.savefig(savefilename, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
 
 # ==========================================================
 # ==========================================================

@@ -49,9 +49,13 @@ def evaluate(args,
         logging.info("Evaluating entire training dataset...")
         n_batches_tr = images_tr.shape[-1] // args.batch_size
         for iteration in range(n_batches_tr):
-            inputs_cpu, labels_cpu = utils_data.get_batch(images_tr, labels_tr, args.batch_size, batch_type = 'sequential', start_idx = iteration * args.batch_size)
-            inputs_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs_cpu, device)
-            labels_gpu = utils_data.make_torch_tensor_and_send_to_device(labels_cpu, device)
+            inputs_cpu, labels_cpu = utils_data.get_batch(images_tr,
+                                                          labels_tr,
+                                                          args.batch_size,
+                                                          batch_type = 'sequential',
+                                                          start_idx = iteration * args.batch_size)
+            inputs_gpu = utils_data.torch_and_send_to_device(inputs_cpu, device)
+            labels_gpu = utils_data.torch_and_send_to_device(labels_cpu, device)
             labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
             # inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
             dice_score_tr = dice_score_tr + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs_gpu)[-1]), labels_gpu_1hot))
@@ -59,9 +63,13 @@ def evaluate(args,
         logging.info("Evaluating entire validation dataset...")
         n_batches_vl = images_vl.shape[-1] // args.batch_size
         for iteration in range(n_batches_vl):
-            inputs_cpu, labels_cpu = utils_data.get_batch(images_vl, labels_vl, args.batch_size, batch_type = 'sequential', start_idx = iteration * args.batch_size)
-            inputs_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs_cpu, device)
-            labels_gpu = utils_data.make_torch_tensor_and_send_to_device(labels_cpu, device)
+            inputs_cpu, labels_cpu = utils_data.get_batch(images_vl,
+                                                          labels_vl,
+                                                          args.batch_size,
+                                                          batch_type = 'sequential',
+                                                          start_idx = iteration * args.batch_size)
+            inputs_gpu = utils_data.torch_and_send_to_device(inputs_cpu, device)
+            labels_gpu = utils_data.torch_and_send_to_device(labels_cpu, device)
             labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
             dice_score_vl = dice_score_vl + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs_gpu)[-1]), labels_gpu_1hot))
     
@@ -69,6 +77,13 @@ def evaluate(args,
     model.train()
 
     return dice_score_tr / n_batches_tr, dice_score_vl / n_batches_vl
+
+# ==========================================
+# ==========================================
+def get_probs_and_outputs(model, inputs_gpu):
+    model_outputs = model(inputs_gpu)
+    outputs_probs = torch.nn.Softmax(dim=1)(model_outputs[-1])
+    return model_outputs, outputs_probs
 
 # ==========================================
 # ==========================================
@@ -90,19 +105,18 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
-
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v2/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--max_iterations', default=50001, type=int)
+    parser.add_argument('--log_frequency', default=500, type=int)
     parser.add_argument('--eval_frequency', default=5000, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
     
     parser.add_argument('--model_has_heads', default=0, type=int)    
-    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
-    parser.add_argument('--lambda_data_aug', default=1.0, type=float) # weight for regularization loss (data augmentation)
+    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency in each layer
     parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
     
@@ -224,8 +238,7 @@ if __name__ == "__main__":
     logging.info('Defining losses')
     dice_loss_function = DiceLoss(include_background=False)
     dice_loss_function = dice_loss_function.to(device) 
-
-    if args.method_invariance == 3:
+    if args.method_invariance == 2:
         cons_loss_function = torch.nn.MSELoss()
         cons_loss_function = cons_loss_function.to(device) 
 
@@ -251,6 +264,9 @@ if __name__ == "__main__":
     logging.info('Starting training iterations')
     for iteration in range(args.max_iterations):
 
+        if iteration % args.log_frequency == 0:
+            logging.info('Training iteration ' + str(iteration + 1) + '...')
+
         # # tracking cpu and gpu utilization
         # info0 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(0))
         # info1 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(1))
@@ -265,47 +281,6 @@ if __name__ == "__main__":
         # writer.add_scalar("Utilization/GPU2", usage2, iteration+1)
         # writer.add_scalar("Utilization/GPU3", usage3, iteration+1)
 
-        if iteration % args.eval_frequency == 0:
-            logging.info('Training iteration ' + str(iteration + 1) + '...')
-
-        # ===================================
-        # get a batch of original (pre-processed) training images and labels
-        # ===================================
-        inputs_cpu, labels_cpu = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
-
-        # ===================================
-        # do data augmentation / make batches as your method wants them to be
-        # ===================================
-        if args.method_invariance == 1: # data augmentation
-            inputs1_cpu, labels1_cpu = utils_data.transform_for_data_aug(inputs_cpu, labels_cpu, data_aug_prob = args.data_aug_prob)
-            if iteration < 5:
-                savefilename = vis_path + 'iter' + str(iteration) + '.png'
-                utils_vis.save_images_and_labels_orig_and_transformed(inputs_cpu, labels_cpu,
-                                                                      inputs1_cpu, labels1_cpu,
-                                                                      savefilename)
-
-        elif args.method_invariance == 2 or args.method_invariance == 3: # consistency loss
-            inputs1_cpu, inputs2_cpu, labels1_cpu = utils_data.transform_for_data_cons(inputs_cpu, labels_cpu, data_aug_prob = args.data_aug_prob)
-            if iteration < 5:
-                savefilename = vis_path + 'iter' + str(iteration) + '.png'
-                utils_vis.save_images_and_labels_orig_and_transformed_two_ways(inputs_cpu, labels_cpu,
-                                                                               inputs1_cpu, labels1_cpu,
-                                                                               inputs2_cpu, labels1_cpu,
-                                                                               savefilename)
-
-        # ===================================
-        # send stuff to gpu
-        # ===================================
-        inputs_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs_cpu, device)
-        labels_gpu = utils_data.make_torch_tensor_and_send_to_device(labels_cpu, device)
-        labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
-        if args.method_invariance != 0:
-            inputs1_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs1_cpu, device)
-            labels1_gpu = utils_data.make_torch_tensor_and_send_to_device(labels1_cpu, device)
-            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
-        if args.method_invariance == 2 or args.method_invariance == 3:
-            inputs2_gpu = utils_data.make_torch_tensor_and_send_to_device(inputs2_cpu, device)
-                
         # ===================================
         # https://discuss.pytorch.org/t/what-does-the-backward-function-do/9944
         # optimizer.zero_grad() clears x.grad for every parameter x in the optimizer.
@@ -314,13 +289,18 @@ if __name__ == "__main__":
         optimizer.zero_grad()
 
         # ===================================
-        # pass through model and compute predictions
+        # get a batch of original (pre-processed) training images and labels
         # ===================================
-        model_outputs = model(inputs_gpu)
-        outputs = model_outputs[-1]
-        outputs_probabilities = torch.nn.Softmax(dim=1)(outputs)
+        inputs_cpu, labels_cpu = utils_data.get_batch(images_tr, labels_tr, args.batch_size)
+        inputs_gpu = utils_data.torch_and_send_to_device(inputs_cpu, device)
+        labels_gpu = utils_data.torch_and_send_to_device(labels_cpu, device)
+        labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
+        if iteration < 5:
+            utils_vis.save_images_and_labels(inputs_gpu, labels_gpu, vis_path + 'orig_iter' + str(iteration) + '.png')       
+        # pass through model and compute predictions
+        model_outputs, outputs_probs = get_probs_and_outputs(model, inputs_gpu)
         # compute loss value for these predictions
-        dice_loss = dice_loss_function(outputs_probabilities, labels_gpu_1hot)
+        dice_loss = dice_loss_function(outputs_probs, labels_gpu_1hot)
         # log loss to the tensorboard
         writer.add_scalar("TRAINING/DiceLossPerBatch", dice_loss, iteration+1)
 
@@ -331,112 +311,51 @@ if __name__ == "__main__":
             total_loss = dice_loss
         
         elif args.method_invariance == 1: # data augmentation
-        
-            model_outputs1 = model(inputs1_gpu)
-            outputs1 = model_outputs1[-1]
-            outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
-        
+            # transform the batch
+            inputs1_gpu, labels1_gpu, geom_params1 = utils_data.transform_batch(inputs_gpu, labels_gpu, data_aug_prob = args.data_aug_prob, device = device)
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
+            if iteration < 5:
+                utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
+            # compute predictions for the transformed batch
+            model_outputs1, outputs_probs1 = get_probs_and_outputs(model, inputs1_gpu)
             # loss on data aug samples
-            dice_loss_data_aug = dice_loss_function(outputs1_probabilities, labels1_gpu_1hot)
-        
+            dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
             # total loss
-            total_loss = (dice_loss + args.lambda_data_aug * dice_loss_data_aug) / (1 + args.lambda_data_aug)
+            total_loss = dice_loss_data_aug
             writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
         
-        elif args.method_invariance == 2: # consistency regularization
-        
-            model_outputs1 = model(inputs1_gpu)
-            outputs1 = model_outputs1[-1]
-            outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
-            model_outputs2 = model(inputs2_gpu)
-            outputs2 = model_outputs2[-1]
-            outputs2_probabilities = torch.nn.Softmax(dim=1)(outputs2)
-        
-            # check if inversion has happened correctly:
+        elif args.method_invariance == 2: # consistency regularization at each layer
+            # transform the batch twice
+            inputs1_gpu, labels1_gpu, t1 = utils_data.transform_batch(inputs_gpu, labels_gpu, data_aug_prob = args.data_aug_prob, device = device)
+            inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs_gpu, labels_gpu, data_aug_prob = args.data_aug_prob, device = device)
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
+            labels2_gpu_1hot = utils_data.make_label_onehot(labels2_gpu, args.num_labels)
             if iteration < 5:
-                utils_vis.save_debug(inputs_cpu,
-                                     labels_cpu,
-                                     inputs1_cpu,
-                                     labels1_cpu,
-                                     inputs2_cpu,
-                                     labels1_cpu,
-                                     torch.clone(outputs1_probabilities).detach().cpu().numpy(),
-                                     torch.clone(outputs2_probabilities).detach().cpu().numpy(),
-                                     vis_path + 'preds_iter' + str(iteration) + '.png')
-        
-            # consistency loss
-            dice_loss_consistency = dice_loss_function(outputs1_probabilities, outputs2_probabilities)
-        
-            # total loss
-            total_loss = (dice_loss + args.lambda_reg_consis * dice_loss_consistency) / (1 + args.lambda_reg_consis)
-            writer.add_scalar("TRAINING/ConsistencyLossPerBatch", dice_loss_consistency, iteration+1)
-        
-        elif args.method_invariance == 3: # consistency regularization at each layer
-        
-            # make sure you are using a model with heads
-            model_outputs1 = model(inputs1_gpu)
-            outputs1 = model_outputs1[-1]
-            outputs1_probabilities = torch.nn.Softmax(dim=1)(outputs1)
-            model_outputs2 = model(inputs2_gpu)
-            outputs2 = model_outputs2[-1]
-            outputs2_probabilities = torch.nn.Softmax(dim=1)(outputs2)
-                
-            # get output of heads
-            heads1 = model_outputs1[0:-1]
-            heads2 = model_outputs2[0:-1]
-        
-            # vis outputs of heads
-            if iteration < 5:
-                utils_vis.save_heads(inputs_cpu,
-                                     inputs1_cpu,
-                                     inputs2_cpu,
-                                     torch.clone(heads1[0]).detach().cpu().numpy(),
-                                     torch.clone(heads2[0]).detach().cpu().numpy(),
-                                     torch.clone(heads1[1]).detach().cpu().numpy(),
-                                     torch.clone(heads2[1]).detach().cpu().numpy(),
-                                     torch.clone(heads1[2]).detach().cpu().numpy(),
-                                     torch.clone(heads2[2]).detach().cpu().numpy(),
-                                     torch.clone(outputs1_probabilities).detach().cpu().numpy(),
-                                     torch.clone(outputs2_probabilities).detach().cpu().numpy(),
-                                     vis_path + 'heads_iter' + str(iteration) + '.png')
-            
+                utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs2_gpu, labels2_gpu, vis_path + 't2_iter' + str(iteration) + '.png')
+            # compute predictions for both the transformed batches
+            model_outputs1, outputs_probs1 = get_probs_and_outputs(model, inputs1_gpu)
+            model_outputs2, outputs_probs2 = get_probs_and_outputs(model, inputs2_gpu)        
+            # loss on data aug samples (one of the two transformations)
+            dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
+            writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
             # consistency loss at each layer
-            cons_l1 = cons_loss_function(heads1[0], heads2[0])
-            cons_l2 = cons_loss_function(heads1[1], heads2[1])
-            cons_l3 = cons_loss_function(heads1[2], heads2[2])
-            cons_l4 = cons_loss_function(heads1[3], heads2[3])
-            cons_l5 = cons_loss_function(heads1[4], heads2[4])
-            cons_l6 = cons_loss_function(heads1[5], heads2[5])
-            cons_l7 = cons_loss_function(heads1[6], heads2[6])
-            cons_l8 = cons_loss_function(heads1[7], heads2[7])
-            cons_l9 = cons_loss_function(heads1[8], heads2[8])
-            
-            # weights for the loss at each layer
-            alpha1 = args.lambda_consis * ((1 / 9) ** args.alpha_layer)
-            alpha2 = args.lambda_consis * ((2 / 9) ** args.alpha_layer)
-            alpha3 = args.lambda_consis * ((3 / 9) ** args.alpha_layer)
-            alpha4 = args.lambda_consis * ((4 / 9) ** args.alpha_layer)
-            alpha5 = args.lambda_consis * ((5 / 9) ** args.alpha_layer)
-            alpha6 = args.lambda_consis * ((6 / 9) ** args.alpha_layer)
-            alpha7 = args.lambda_consis * ((7 / 9) ** args.alpha_layer)
-            alpha8 = args.lambda_consis * ((8 / 9) ** args.alpha_layer)
-            alpha9 = args.lambda_consis * ((9 / 9) ** args.alpha_layer)
-
+            cons_loss_layer_l = []
+            weight_layer_l = []
+            num_layers = len(model_outputs1)
+            for l in range(num_layers):
+                cons_loss_layer_l.append(cons_loss_function(utils_data.invert_geometric_transforms(model_outputs1[l], t1),
+                                                            utils_data.invert_geometric_transforms(model_outputs2[l], t2)))
+                weight_layer_l.append(args.lambda_consis * (((l+1) / num_layers) ** args.alpha_layer))
+                writer.add_scalar("TRAINING/ConsistencyLossPerBatchLayer"+str(l+1), cons_loss_layer_l[l], iteration+1)
+                writer.add_scalar("TRAINING/ConsistencyLossWeightLayer"+str(l+1), weight_layer_l[l], iteration+1)
             # total consistency loss
-            loss_consistency = alpha1 * cons_l1 + alpha2 * cons_l2 + alpha3 * cons_l3 + alpha4 * cons_l4 + \
-                            alpha5 * cons_l5 + alpha6 * cons_l6 + alpha7 * cons_l7 + alpha8 * cons_l8 + alpha9 * cons_l9
-            lambda_consis = alpha1 + alpha2 + alpha3 + alpha4 + alpha5 + alpha6 + alpha7 + alpha8 + alpha9
-
-            # loss on data aug samples
-            dice_loss_data_aug = dice_loss_function(outputs1_probabilities, labels1_gpu_1hot)
-            
-            # total loss
-            total_loss = (dice_loss + args.lambda_data_aug * dice_loss_data_aug + lambda_consis * loss_consistency) / (1 + lambda_consis + args.lambda_data_aug)
-            
-            # tensorboard
+            loss_consistency = sum(i[0] * i[1] for i in zip(weight_layer_l, cons_loss_layer_l))
             writer.add_scalar("TRAINING/ConsistencyLossPerBatch", loss_consistency, iteration+1)
-            writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
+            # total loss
+            total_loss = (dice_loss_data_aug + loss_consistency) / (1 + sum(weight_layer_l))
         
+        # total loss to tensorboard
         writer.add_scalar("TRAINING/TotalLossPerBatch", total_loss, iteration+1)
 
         # ===================================
@@ -444,17 +363,17 @@ if __name__ == "__main__":
         # ===================================
         if iteration % 100 == 0:
             writer.add_figure('Training',
-                               utils_vis.show_images_labels_predictions(inputs_gpu, labels_gpu_1hot, outputs_probabilities),
+                               utils_vis.show_images_labels_predictions(inputs_gpu, labels_gpu_1hot, outputs_probs),
                                global_step = iteration+1)
 
             if args.method_invariance != 0:
                 writer.add_figure('TrainingTransformed1',
-                                   utils_vis.show_images_labels_predictions(inputs1_gpu, labels1_gpu_1hot, outputs1_probabilities),
+                                   utils_vis.show_images_labels_predictions(inputs1_gpu, labels1_gpu_1hot, outputs_probs1),
                                    global_step = iteration+1)
 
-            if args.method_invariance == 2 or args.method_invariance == 3:
+            if args.method_invariance == 2:
                 writer.add_figure('TrainingTransformed2',
-                                   utils_vis.show_images_labels_predictions(inputs2_gpu, labels1_gpu_1hot, outputs2_probabilities),
+                                   utils_vis.show_images_labels_predictions(inputs2_gpu, labels2_gpu_1hot, outputs_probs2),
                                    global_step = iteration+1)
         
         # ===================================
@@ -511,5 +430,3 @@ if __name__ == "__main__":
         # flush all summaries to tensorboard
         # ===================================
         writer.flush()
-
-    nvidia_smi.nvmlShutdown()

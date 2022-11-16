@@ -25,11 +25,9 @@ def make_expdir(args):
     if args.method_invariance == 0: # no regularization
         logdir = logdir + '/'
     elif args.method_invariance == 1: # data augmentation
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam' + str(args.lambda_data_aug) + '/'
-    elif args.method_invariance == 2: # consistency regularization
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam' + str(args.lambda_consis) + '/'
-    elif args.method_invariance == 3: # consistency regularization per layer
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_data_aug) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
+        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '/'
+    elif args.method_invariance == 2: # consistency regularization per layer
+        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
 
     # run number
     logdir = logdir + 'run' + str(args.run_number) + '/'
