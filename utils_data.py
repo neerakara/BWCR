@@ -100,7 +100,7 @@ def get_transform_params(data_aug_prob, device):
     transform_params['device'] = device # required for generating random noise and sending it to gpu
     # intensity
     transform_params['gamma_min'] = 0.5
-    transform_params['gamma_max'] = 2.5
+    transform_params['gamma_max'] = 2.0
     transform_params['bright_min'] = -0.1
     transform_params['bright_max'] = 0.1
     transform_params['int_scale_min'] = 0.9
@@ -109,8 +109,8 @@ def get_transform_params(data_aug_prob, device):
     # quality
     transform_params['blur_min'] = 0 # 0.25
     transform_params['blur_max'] = 5 # 1.5
-    transform_params['sharpen_min'] = 10.0
-    transform_params['sharpen_max'] = 30.0
+    transform_params['sharpen_min'] = 0.1
+    transform_params['sharpen_max'] = 0.3
     transform_params['noise_min'] = 0.01
     transform_params['noise_max'] = 0.1
     # geometric
@@ -118,8 +118,8 @@ def get_transform_params(data_aug_prob, device):
     transform_params['trans_max'] = 10.0
     transform_params['rot_min'] = -20.0
     transform_params['rot_max'] = 20.0
-    transform_params['scale_min'] = 0.4
-    transform_params['scale_max'] = 1.6
+    transform_params['scale_min'] = 0.75
+    transform_params['scale_max'] = 1.25
     transform_params['shear_min'] = -5.0
     transform_params['shear_max'] = 5.0
     transform_params['sigma_min'] = 10.0
@@ -205,18 +205,22 @@ def blur(image, params):
 # ============================================================
 def sharpen(image, params):
     image1 = blur(image, params)
-    image2 = blur(image, params)
+    image2 = blur(image1, params)
     a = sample_from_uniform(params['sharpen_min'], params['sharpen_max'])
     if DEBUGGING == 1: logging.info('doing sharpening ' + str(a))
-    return image1 + (image1 - image2) * a
+    image_sharp = image1 + (image1 - image2) * a
+    image_sharp = (image_sharp - torch.min(image_sharp)) / (torch.max(image_sharp) - torch.min(image_sharp))
+    return image_sharp
 
 # ============================================================
 # ============================================================
 def noise(image, params):
     if DEBUGGING == 1: logging.info('adding noise')
     s = sample_from_uniform(params['noise_min'], params['noise_max'])
-    n = torch.normal(0.0, s, size=image.shape).to(params['device'])
-    return image + n
+    noise = torch.normal(0.0, s, size=image.shape).to(params['device'])
+    image_noisy = image + noise
+    image_noisy = (image_noisy - torch.min(image_noisy)) / (torch.max(image_noisy) - torch.min(image_noisy))
+    return image_noisy
 
 # ============================================================
 # invert geometric transformations for each prediction in the batch 

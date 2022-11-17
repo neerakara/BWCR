@@ -87,17 +87,26 @@ def show_images_labels_predictions(images,
 # ==========================================================
 def save_images_and_labels(images,
                            labels,
-                           savefilename):
+                           savefilename,
+                           normalize = False,
+                           rot90_k = -1):
     
     plt.figure(figsize=(12, 24))
     tmp_images = images.detach().cpu().numpy()
     tmp_labels = labels.detach().cpu().numpy()
     # show 4 examples per batch
     for batch_index in range(4):
-        plt.subplot(4, 2, 2*batch_index + 1, xticks=[], yticks=[])
-        plt.imshow(normalize_img_for_vis(tmp_images[batch_index,0,:,:]), cmap = 'gray')
-        plt.subplot(4, 2, 2*batch_index + 2, xticks=[], yticks=[])
-        plt.imshow(normalize_img_for_vis(tmp_labels[batch_index,0,:,:]), cmap = 'gray')
+        if normalize == True:
+            im = normalize_img_for_vis(tmp_images[batch_index,0,:,:])
+            lb = normalize_img_for_vis(tmp_labels[batch_index,0,:,:])
+        else:
+            im = tmp_images[batch_index,0,:,:]
+            lb = tmp_labels[batch_index,0,:,:]
+        if rot90_k != 0:
+            im = np.rot90(im, k=rot90_k)
+            lb = np.rot90(lb, k=rot90_k)
+        plt.subplot(4, 2, 2*batch_index + 1, xticks=[], yticks=[]); plt.imshow(im, cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 2, 2*batch_index + 2, xticks=[], yticks=[]); plt.imshow(lb, cmap = 'gray'); plt.colorbar()
     plt.savefig(savefilename, bbox_inches='tight', dpi=50)
     plt.close()
     return 0
