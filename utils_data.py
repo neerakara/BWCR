@@ -234,11 +234,15 @@ def invert_geometric_transforms(features, t):
 def transform_batch(images,
                     labels,
                     data_aug_prob,
-                    device):
+                    device,
+                    t = 0):
     
     transform_params = get_transform_params(data_aug_prob, device)
 
-    images_t, labels_t, t = apply_geometric_transforms_torch(images, labels, transform_params)
+    if t != 0:
+        images_t, labels_t, t = apply_geometric_transforms_torch(images, labels, transform_params, t = t)
+    else:
+        images_t, labels_t, t = apply_geometric_transforms_torch(images, labels, transform_params)
     
     for zz in range(images_t.shape[0]):
         images_t[zz, 0, :, :] = apply_intensity_transform(images_t[zz, 0, :, :], transform_params)
@@ -247,11 +251,16 @@ def transform_batch(images,
 
 # ==================================================
 # ==================================================
-def apply_geometric_transforms_torch(images, labels, params):
+def apply_geometric_transforms_torch(images,
+                                     labels,
+                                     params,
+                                     t = 0):
 
-    t = sample_affine_params(params)
+    if t == 0:
+        t = sample_affine_params(params)
     images_t = TF.affine(images, angle=t[0], translate=[t[1], t[2]], scale=t[3], shear=[t[4], t[5]], interpolation = tt.InterpolationMode.BILINEAR)
     labels_t = TF.affine(labels, angle=t[0], translate=[t[1], t[2]], scale=t[3], shear=[t[4], t[5]], interpolation = tt.InterpolationMode.NEAREST)    
+    
     return images_t, labels_t, t
 
 # ==================================================
