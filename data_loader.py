@@ -1,4 +1,4 @@
-import data_placenta
+import data_placenta_new as data_placenta
 import data_prostate
 import argparse
 import logging
@@ -11,8 +11,10 @@ def load_data(args,
               train_test_val):
 
     if args.dataset == 'placenta':
-        data_path = '/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-processed/'
-        data = data_placenta.load_dataset(data_path,
+        data_orig_path = '/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-processed/' # orig data is here
+        data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/placenta/' # save processed data here
+        data = data_placenta.load_dataset(data_orig_path,
+                                          data_proc_path,
                                           train_test_val = train_test_val,
                                           cv_fold = args.cv_fold_num)
 

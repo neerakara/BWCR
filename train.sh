@@ -23,8 +23,8 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/train.py \
 --cv_fold_num 1 \
 --run_number 1 \
 --data_aug_prob 0.5 \
---model_has_heads 1 \
---method_invariance 2 \
+--model_has_heads 0 \
+--method_invariance 0 \
 --lambda_consis 0.0 \
 --alpha_layer 10.0
 

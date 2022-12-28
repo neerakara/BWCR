@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='prostate') # placenta / prostate
+    parser.add_argument('--dataset', default='placenta') # placenta / prostate
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_frequency', default=10000, type=int)
     
     parser.add_argument('--model_has_heads', default=0, type=int)    
-    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency in each layer
+    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency in each layer (geom + int), 3: consistency in each layer (int)
     parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
     
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     logging.info('Defining losses')
     dice_loss_function = DiceLoss(include_background=False)
     dice_loss_function = dice_loss_function.to(device) 
-    if args.method_invariance == 2:
+    if args.method_invariance in [2, 3]:
         cons_loss_function = torch.nn.MSELoss()
         cons_loss_function = cons_loss_function.to(device) 
 
@@ -311,47 +311,107 @@ if __name__ == "__main__":
             total_loss = dice_loss
         
         elif args.method_invariance == 1: # data augmentation
+            
             # transform the batch
-            inputs1_gpu, labels1_gpu, geom_params1 = utils_data.transform_batch(inputs_gpu, labels_gpu, data_aug_prob = args.data_aug_prob, device = device)
-            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
+            inputs1_gpu, labels1_gpu, geom_params1 = utils_data.transform_batch(inputs_gpu,
+                                                                                labels_gpu,
+                                                                                data_aug_prob = args.data_aug_prob,
+                                                                                device = device)
+            # visualize training samples
             if iteration < 5:
-                utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs1_gpu,
+                                                 labels1_gpu,
+                                                 vis_path + 't1_iter' + str(iteration) + '.png')
+
+            # convert labels to 1hot
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu,
+                                                            args.num_labels)
+
             # compute predictions for the transformed batch
-            model_outputs1, outputs_probs1 = get_probs_and_outputs(model, inputs1_gpu)
+            model_outputs1, outputs_probs1 = get_probs_and_outputs(model,
+                                                                   inputs1_gpu)
+
             # loss on data aug samples
-            dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
+            dice_loss_data_aug = dice_loss_function(outputs_probs1,
+                                                    labels1_gpu_1hot)
+
             # total loss
             total_loss = dice_loss_data_aug
             writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
         
-        elif args.method_invariance == 2: # consistency regularization at each layer
-            # transform the batch twice
-            inputs1_gpu, labels1_gpu, t1 = utils_data.transform_batch(inputs_gpu, labels_gpu, data_aug_prob = args.data_aug_prob, device = device)
-            inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs_gpu, labels_gpu, data_aug_prob = args.data_aug_prob, device = device)
-            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
-            labels2_gpu_1hot = utils_data.make_label_onehot(labels2_gpu, args.num_labels)
+        elif args.method_invariance in [2, 3]: # consistency regularization at each layer
+
+            # transform the batch
+            inputs1_gpu, labels1_gpu, t1 = utils_data.transform_batch(inputs_gpu,
+                                                                      labels_gpu,
+                                                                      data_aug_prob = args.data_aug_prob,
+                                                                      device = device)
+
+            # apply same geometric transform on both batches
+            if args.method_invariance == 3:
+                inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs_gpu,
+                                                                          labels_gpu,
+                                                                          data_aug_prob = args.data_aug_prob,
+                                                                          device = device,
+                                                                          t = t1)
+            # apply different geometric transforms on both batches
+            elif args.method_invariance == 2:
+                inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs_gpu,
+                                                                          labels_gpu,
+                                                                          data_aug_prob = args.data_aug_prob,
+                                                                          device = device)
+
+            # visualize training samples
             if iteration < 5:
-                utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
-                utils_vis.save_images_and_labels(inputs2_gpu, labels2_gpu, vis_path + 't2_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs1_gpu,
+                                                 labels1_gpu,
+                                                 vis_path + 't1_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs2_gpu,
+                                                 labels2_gpu,
+                                                 vis_path + 't2_iter' + str(iteration) + '.png')
+
+            # convert labels to 1hot
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu,
+                                                            args.num_labels)
+            labels2_gpu_1hot = utils_data.make_label_onehot(labels2_gpu,
+                                                            args.num_labels)
+            
             # compute predictions for both the transformed batches
-            model_outputs1, outputs_probs1 = get_probs_and_outputs(model, inputs1_gpu)
-            model_outputs2, outputs_probs2 = get_probs_and_outputs(model, inputs2_gpu)        
+            model_outputs1, outputs_probs1 = get_probs_and_outputs(model,
+                                                                   inputs1_gpu)
+            model_outputs2, outputs_probs2 = get_probs_and_outputs(model,
+                                                                   inputs2_gpu)        
+
             # loss on data aug samples (one of the two transformations)
             dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
             writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
+
             # consistency loss at each layer
             cons_loss_layer_l = []
             weight_layer_l = []
             num_layers = len(model_outputs1)
+            
             for l in range(num_layers):
-                cons_loss_layer_l.append(cons_loss_function(utils_data.invert_geometric_transforms(model_outputs1[l], t1),
-                                                            utils_data.invert_geometric_transforms(model_outputs2[l], t2)))
+            
+                if args.method_invariance == 3:
+                    # same geometric transform on both batches, so no need to invert
+                    cons_loss_layer_l.append(cons_loss_function(model_outputs1[l],
+                                                                model_outputs2[l]))
+            
+                elif args.method_invariance == 2:
+                    # different geometric transforms on both batches, so need to invert
+                    cons_loss_layer_l.append(cons_loss_function(utils_data.invert_geometric_transforms(model_outputs1[l], t1),
+                                                                utils_data.invert_geometric_transforms(model_outputs2[l], t2)))
+            
                 weight_layer_l.append(args.lambda_consis * (((l+1) / num_layers) ** args.alpha_layer))
+            
                 writer.add_scalar("TRAINING/ConsistencyLossPerBatchLayer"+str(l+1), cons_loss_layer_l[l], iteration+1)
                 writer.add_scalar("TRAINING/ConsistencyLossWeightLayer"+str(l+1), weight_layer_l[l], iteration+1)
+            
             # total consistency loss
             loss_consistency = sum(i[0] * i[1] for i in zip(weight_layer_l, cons_loss_layer_l))
             writer.add_scalar("TRAINING/ConsistencyLossPerBatch", loss_consistency, iteration+1)
+            
             # total loss
             total_loss = (dice_loss_data_aug + loss_consistency) / (1 + sum(weight_layer_l))
         
@@ -371,7 +431,7 @@ if __name__ == "__main__":
                                    utils_vis.show_images_labels_predictions(inputs1_gpu, labels1_gpu_1hot, outputs_probs1),
                                    global_step = iteration+1)
 
-            if args.method_invariance == 2:
+            if args.method_invariance in [2, 3]:
                 writer.add_figure('TrainingTransformed2',
                                    utils_vis.show_images_labels_predictions(inputs2_gpu, labels2_gpu_1hot, outputs_probs2),
                                    global_step = iteration+1)
