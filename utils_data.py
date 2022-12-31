@@ -14,8 +14,17 @@ from scipy.ndimage.filters import gaussian_filter
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 import torchvision.transforms as tt
+import nibabel as nib
 
 DEBUGGING = 0
+
+# ==================================================
+# Shortcut to load a nifti file
+# ==================================================
+def load_nii(img_path):
+
+    nimg = nib.load(img_path)
+    return nimg.get_data(), nimg.affine, nimg.header
 
 # ==================================================
 # ==================================================
@@ -168,6 +177,34 @@ def crop_or_pad(slice, nx, ny):
         else:
             slice_cropped[x_c:x_c + x, y_c:y_c + y] = slice[:, :]
     return slice_cropped
+
+# ===============================================================
+# crops or pads a volume in the x, y directions.
+# size in the z direction is preserved.
+# ===============================================================
+def crop_or_pad_volume_in_xy(volume, nx, ny):
+    x, y, z = volume.shape
+
+    x_s = (x - nx) // 2
+    y_s = (y - ny) // 2
+    x_c = (nx - x) // 2
+    y_c = (ny - y) // 2
+
+    if x > nx and y > ny:
+        volume_cropped = volume[x_s:x_s + nx, y_s:y_s + ny, :]
+    else:
+        volume_cropped = np.zeros((nx, ny, z))
+        
+        if x <= nx and y > ny:
+            volume_cropped[x_c:x_c + x, :, :] = volume[:, y_s:y_s + ny, :]
+        
+        elif x > nx and y <= ny:
+            volume_cropped[:, y_c:y_c + y, :] = volume[x_s:x_s + nx, :, :]
+        
+        else:
+            volume_cropped[x_c:x_c + x, y_c:y_c + y, :] = volume[:, :, :]
+
+    return volume_cropped
 
 # ============================================================
 # ============================================================

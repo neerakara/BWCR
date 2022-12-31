@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Script to send job to SLURM clusters using sbatch.
-# Usage: sbatch main.sh
+# Usage: sbatch train.sh
 # Adjust line '-l hostname=xxxxx' before runing.
 # The script also requires changing the paths of the CUDA and python environments and the code to the local equivalents of your machines.
 
@@ -20,11 +20,11 @@ source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
 ## EXECUTION OF PYTHON CODE:
 python /data/vision/polina/users/nkarani/projects/crael/seg/train.py \
---cv_fold_num 1 \
+--cv_fold_num 3 \
 --run_number 1 \
 --data_aug_prob 0.5 \
 --model_has_heads 0 \
---method_invariance 0 \
+--method_invariance 1 \
 --lambda_consis 0.0 \
 --alpha_layer 10.0
 

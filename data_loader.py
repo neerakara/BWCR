@@ -1,4 +1,4 @@
-import data_placenta_new as data_placenta
+import data_placenta
 import data_prostate
 import argparse
 import logging
@@ -11,22 +11,25 @@ def load_data(args,
               train_test_val):
 
     if args.dataset == 'placenta':
-        data_orig_path = '/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-processed/' # orig data is here
+        data_orig_path = '/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-raw/' # orig data is here
         data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/placenta/' # save processed data here
         data = data_placenta.load_dataset(data_orig_path,
                                           data_proc_path,
                                           train_test_val = train_test_val,
-                                          cv_fold = args.cv_fold_num)
+                                          cv_fold = args.cv_fold_num,
+                                          size = (128, 128),
+                                          target_resolution = (1.0, 1.0))
 
     elif args.dataset == 'prostate':
-        data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/' # orig data is here
+        data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/' # orig data is here
         data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
         # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
         data = data_prostate.load_dataset(data_orig_path,
                                           data_proc_path,
                                           sub_dataset,
-                                          train_test_val = train_test_val,
-                                          cv_fold = args.cv_fold_num)
+                                          cv_fold = args.cv_fold_num,
+                                          size = (256, 256),
+                                          target_resolution = (0.625, 0.625))
 
     return data
 
