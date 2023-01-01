@@ -264,9 +264,17 @@ def noise(image, params):
 # ============================================================
 def invert_geometric_transforms(features, t):
 
-    return TF.affine(features, angle=-t[0], translate=[-t[1], -t[2]], scale=1 / t[3], shear=[-t[4], -t[5]], interpolation = transforms.InterpolationMode.BILINEAR)
+    return TF.affine(features,
+                     angle=-t[0],
+                     translate=[-t[1], -t[2]],
+                     scale=1 / t[3],
+                     shear=[-t[4], -t[5]],
+                     interpolation = transforms.InterpolationMode.BILINEAR)
 
 # ==================================================
+# Applies transformation to images and labels
+# If t is provided, it should contain affine transformation parameters, and these parameters will be used for applying the geometric transforms
+# Otherwise, random geometric transform will be applied.
 # ==================================================
 def transform_batch(images,
                     labels,
@@ -295,8 +303,20 @@ def apply_geometric_transforms_torch(images,
 
     if t == 0:
         t = sample_affine_params(params)
-    images_t = TF.affine(images, angle=t[0], translate=[t[1], t[2]], scale=t[3], shear=[t[4], t[5]], interpolation = tt.InterpolationMode.BILINEAR)
-    labels_t = TF.affine(labels, angle=t[0], translate=[t[1], t[2]], scale=t[3], shear=[t[4], t[5]], interpolation = tt.InterpolationMode.NEAREST)    
+    
+    images_t = TF.affine(images,
+                         angle=t[0],
+                         translate=[t[1], t[2]],
+                         scale=t[3],
+                         shear=[t[4], t[5]],
+                         interpolation = tt.InterpolationMode.BILINEAR)
+
+    labels_t = TF.affine(labels,
+                         angle=t[0],
+                         translate=[t[1], t[2]],
+                         scale=t[3],
+                         shear=[t[4], t[5]],
+                         interpolation = tt.InterpolationMode.NEAREST)    
     
     return images_t, labels_t, t
 

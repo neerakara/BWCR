@@ -20,13 +20,13 @@ source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
 ## EXECUTION OF PYTHON CODE:
 python /data/vision/polina/users/nkarani/projects/crael/seg/train.py \
---cv_fold_num 3 \
---run_number 1 \
---data_aug_prob 0.5 \
---model_has_heads 0 \
---method_invariance 1 \
---lambda_consis 0.0 \
---alpha_layer 10.0
+--cv_fold_num $1 \
+--run_number $2 \
+--data_aug_prob $3 \
+--model_has_heads $4 \
+--method_invariance $5 \
+--lambda_consis $6 \
+--alpha_layer $7
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

@@ -307,16 +307,23 @@ if __name__ == "__main__":
         # ===================================
         # add additional regularization losses, according to the chosen method
         # ===================================
-        if args.method_invariance == 0: # no regularization
+
+        # ===================================
+        # Method 0: no regularization
+        # ===================================
+        if args.method_invariance == 0:
             total_loss = dice_loss
         
-        elif args.method_invariance == 1: # data augmentation
+        # ===================================
+        # Method 1: data augmentation
+        # ===================================
+        elif args.method_invariance == 1:
             
             # transform the batch
-            inputs1_gpu, labels1_gpu, geom_params1 = utils_data.transform_batch(inputs_gpu,
-                                                                                labels_gpu,
-                                                                                data_aug_prob = args.data_aug_prob,
-                                                                                device = device)
+            inputs1_gpu, labels1_gpu, _ = utils_data.transform_batch(inputs_gpu,
+                                                                     labels_gpu,
+                                                                     data_aug_prob = args.data_aug_prob,
+                                                                     device = device)
             # visualize training samples
             if iteration < 5:
                 utils_vis.save_images_and_labels(inputs1_gpu,
@@ -339,6 +346,12 @@ if __name__ == "__main__":
             total_loss = dice_loss_data_aug
             writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
         
+        # ===================================
+        # Methods 2 / 3: consistency regularization applied in two different ways
+        # Method 2: Most intuitive way to apply the idea. Requires two different geometric transforms to be applied to each batch and all features to be upsampled and inverted.
+        # Method 3: Same geometric transform is applied to each batch, so that consistency loss can be computed without inverting the transforms.
+        # Two different intensity transforms are applied to the batch in both methods.
+        # ===================================
         elif args.method_invariance in [2, 3]: # consistency regularization at each layer
 
             # transform the batch
