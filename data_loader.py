@@ -1,5 +1,6 @@
 import data_placenta
-import data_prostate
+import data_prostate_nci
+import data_prostate_promise
 import argparse
 import logging
 import numpy as np
@@ -24,14 +25,45 @@ def load_data(args,
         data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/' # orig data is here
         data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
         # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
-        data = data_prostate.load_dataset(data_orig_path,
-                                          data_proc_path,
-                                          sub_dataset,
-                                          cv_fold = args.cv_fold_num,
-                                          size = (256, 256),
-                                          target_resolution = (0.625, 0.625))
+        if sub_dataset in ['RUNMC', 'BMC']:
+            data = data_prostate_nci.load_dataset(data_orig_path + 'nci/',
+                                                  data_proc_path,
+                                                  sub_dataset,
+                                                  train_test_val = train_test_val,
+                                                  cv_fold = args.cv_fold_num,
+                                                  size = (256, 256),
+                                                  target_resolution = (0.625, 0.625))
+
+        elif sub_dataset in ['UCL', 'HK', 'BIDMC']:
+            data = data_prostate_promise.load_dataset(data_orig_path + 'promise/',
+                                                      data_proc_path,
+                                                      sub_dataset,
+                                                      train_test_val = train_test_val,
+                                                      cv_fold = args.cv_fold_num,
+                                                      size = (256, 256),
+                                                      target_resolution = (0.625, 0.625))
 
     return data
+
+# ==========================================
+# ==========================================
+def load_without_preproc(sub_dataset,
+                         subject_name):
+
+    data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/' # orig data is here
+    data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
+    # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
+    if sub_dataset in ['RUNMC', 'BMC']:
+        image, label = data_prostate_nci.load_without_preproc(data_proc_path,
+                                                              subject_name)
+
+    elif sub_dataset in ['UCL', 'HK', 'BIDMC']:
+        image, label = data_prostate_promise.load_without_preproc(data_orig_path + 'promise/',
+                                                                  data_proc_path,
+                                                                  sub_dataset,
+                                                                  subject_name)
+
+    return image, label
 
 # ==========================================
 # ==========================================

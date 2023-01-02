@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='placenta') # placenta / prostate
+    parser.add_argument('--dataset', default='prostate') # placenta / prostate
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--test_sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
@@ -205,7 +205,9 @@ if __name__ == "__main__":
     logging.info('number of test subjects: ' + str(num_subjects_ts))
     logging.info('depth dimensions of these test subjects: ' + str(depths_ts))
     subject_dices = []
+    
     for sub in range(num_subjects_ts):
+    
         subject_name = subject_names_ts[sub]
         logging.info(subject_name)
         sub_start = int(np.sum(depths_ts[:sub]))
@@ -222,35 +224,88 @@ if __name__ == "__main__":
             else:
                 x_batch = subject_image[:, :, b*args.batch_size_test : ]
                         
+            # ===================
             # swap axes to bring batch dimension from the back to the front
+            # ===================
             x_batch = np.swapaxes(np.swapaxes(x_batch, 2, 1), 1, 0)
             
+            # ===================
             # add channel axis
+            # ===================
             x_batch = np.expand_dims(x_batch, axis = 1)
             
+            # ===================
             # send to gpu
+            # ===================
             x_batch_gpu = utils_data.torch_and_send_to_device(x_batch, device)
             
+            # ===================
             # make prediction
+            # ===================
             outputs = model(x_batch_gpu)
             predicted_probs_gpu_this_batch = torch.nn.Softmax(dim=1)(outputs[-1])
             
+            # ===================
             # accumulate predictions
+            # ===================
             if b == 0:
                 predicted_probs_gpu = predicted_probs_gpu_this_batch
             else:
                 predicted_probs_gpu = torch.cat((predicted_probs_gpu, predicted_probs_gpu_this_batch), dim = 0)
 
+        # ===================
         # move prediction to cpu
+        # ===================
         predicted_probs_cpu = predicted_probs_gpu.detach().cpu().numpy()
         
+        # ===================
         # working with binary segmentations for now
+        # ===================
         soft_prediction = predicted_probs_cpu[:, 1, :, :]
         hard_prediction = (soft_prediction > 0.5).astype(np.float32)
-        subject_label = np.swapaxes(np.swapaxes(subject_label, 2, 1), 1, 0)
 
+        # ===================
+        # resolution scaling is needed for prostate datasets
+        # ===================
+        if args.dataset == 'prostate':
+
+            # ===================
+            # read original image and label (without preprocessing)
+            # ===================
+            image_orig, label_orig = data_loader.load_without_preproc(args.test_sub_dataset, subject_name.decode('utf-8'))
+            label_orig[label_orig!=0] = 1
+
+            # ===================
+            # convert the predicitons back to original resolution
+            # ===================
+            hard_prediction_orig_res_and_size = utils_data.rescale_and_crop(hard_prediction,
+                                                                            scale = (0.625 / data_test["px"][sub], 0.625 / data_test["py"][sub]),
+                                                                            size = (data_test["nx"][sub], data_test["ny"][sub]),
+                                                                            order = 0).astype(np.uint8)
+
+        elif args.dataset == 'placenta':
+            hard_prediction_orig_res_and_size = hard_prediction
+            image_orig = subject_image
+            label_orig = subject_label
+
+        # ===================
+        # original images and labels are (x,y,z)
+        # predictions are (z, x, y)
+        # swap axes of predictions to fix this
+        # ===================
+        hard_prediction_orig_res_and_size = np.swapaxes(np.swapaxes(hard_prediction_orig_res_and_size, 0, 1), 1, 2)
+        logging.info(hard_prediction_orig_res_and_size.shape)
+        logging.info(label_orig.shape)
+
+        # ===================
+        # visualize results
+        # ===================
+        utils_vis.save_results(image_orig, label_orig, hard_prediction_orig_res_and_size, results_path + subject_name.decode('utf-8') + '.png')
+
+        # ===================
         # compute metrics
-        scores = compute_metrics(pred = hard_prediction, label = subject_label)
+        # ===================
+        scores = compute_metrics(pred = hard_prediction_orig_res_and_size, label = label_orig)
         subject_dices.append(np.round(scores[0], 3))
 
     write_results_to_file(results_path,

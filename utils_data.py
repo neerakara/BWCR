@@ -7,6 +7,7 @@ import torch
 from monai.networks.utils import one_hot
 from skimage.filters import gaussian
 from skimage import transform
+from skimage.transform import rescale
 import scipy.ndimage.interpolation
 import logging
 from scipy.ndimage.interpolation import map_coordinates
@@ -15,6 +16,7 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 import torchvision.transforms as tt
 import nibabel as nib
+import SimpleITK as sitk
 
 DEBUGGING = 0
 
@@ -25,6 +27,50 @@ def load_nii(img_path):
 
     nimg = nib.load(img_path)
     return nimg.get_data(), nimg.affine, nimg.header
+
+# ===================================================
+# Shortcut to save a nifti file
+# ===================================================
+def save_nii(img_path, data, affine, header=None):
+    if header == None:
+        nimg = nib.Nifti1Image(data, affine=affine)
+    else:
+        nimg = nib.Nifti1Image(data, affine=affine, header=header)
+    nimg.to_filename(img_path)
+
+# ===================================================
+# Remove bias field
+# ===================================================
+# https://simpleitk.readthedocs.io/en/master/link_N4BiasFieldCorrection_docs.html
+def correct_bias_field(inputpath, outputpath):
+    
+    inputImage = sitk.ReadImage(inputpath, sitk.sitkFloat32)
+    image = inputImage
+    maskImage = sitk.OtsuThreshold(inputImage, 0, 1, 200)
+    shrinkFactor = 1
+    corrector = sitk.N4BiasFieldCorrectionImageFilter()
+    numberFittingLevels = 4
+    corrected_image = corrector.Execute(image, maskImage)
+    log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
+    corrected_image_full_resolution = inputImage / sitk.Exp(log_bias_field)
+    sitk.WriteImage(corrected_image_full_resolution, outputpath)
+    return 1
+
+# ========================
+# ========================
+def rescale_and_crop(volume,
+                     scale,
+                     size,
+                     order):
+    
+    vol = []
+    for zz in range(volume.shape[0]):               
+        img = np.squeeze(volume[zz, :, :])
+        img_rescaled = rescale(img, scale, order = order, preserve_range = True, multichannel = False, mode = 'constant', anti_aliasing = False)
+        img_rescaled_cropped = crop_or_pad(img_rescaled, size[0], size[1])
+        vol.append(img_rescaled_cropped)
+    
+    return np.array(vol)
 
 # ==================================================
 # ==================================================

@@ -1,7 +1,9 @@
 #!/bin/bash
-method=1
+anatomy='prostate'
+dataset='RUNMC'
+method=3
 daprob=0.5
-lamcons=1.0
+lamcons=0.1
 
 if [[ "$method" -eq 0 ]]; then
     heads=0
@@ -15,13 +17,13 @@ else
     echo "I do not recognize this method."
 fi
 
-for cvfold in 1 2 3
+for cvfold in 1 2
 do
-    for runnum in 2 3
+    for runnum in 1 2 3
     do
-        for alpha in 1.0
+        for alpha in 100.0
         do
-            sbatch /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $cvfold $runnum $daprob $heads $method $lamcons $alpha
+            sbatch /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $heads $method $lamcons $alpha
         done
     done
 done

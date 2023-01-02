@@ -62,6 +62,23 @@ def save_images_labels_predictions_soft_and_hard(images,
 
 # ==========================================================
 # ==========================================================
+def save_results(images,
+                 labels,
+                 preds,
+                 savepath):
+    
+    # find slice with largest foreground
+    zz = np.argmax(np.sum(labels, axis=(0,1)))
+    plt.figure(figsize=(18, 6))
+    plt.subplot(1, 3, 1); plt.imshow(normalize_img_for_vis(images[:,:,zz]), cmap = 'gray')
+    plt.subplot(1, 3, 2); plt.imshow(normalize_img_for_vis(labels[:,:,zz]), cmap = 'gray')
+    plt.subplot(1, 3, 3); plt.imshow(normalize_img_for_vis(preds[:,:,zz]), cmap = 'gray')
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+
+    return 0
+
+# ==========================================================
+# ==========================================================
 def show_images_labels_predictions(images,
                                    labels,
                                    soft_predictions):
