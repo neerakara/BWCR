@@ -275,6 +275,10 @@ if __name__ == "__main__":
             image_orig, label_orig = data_loader.load_without_preproc(args.test_sub_dataset, subject_name.decode('utf-8'))
             label_orig[label_orig!=0] = 1
 
+            if args.test_sub_dataset in ['UCL', 'HK', 'BIDMC']:
+                label_orig = np.swapaxes(np.swapaxes(label_orig, 0, 1), 1, 2)
+                image_orig = np.swapaxes(np.swapaxes(image_orig, 0, 1), 1, 2)
+
             # ===================
             # convert the predicitons back to original resolution
             # ===================

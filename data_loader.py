@@ -58,9 +58,7 @@ def load_without_preproc(sub_dataset,
                                                               subject_name)
 
     elif sub_dataset in ['UCL', 'HK', 'BIDMC']:
-        image, label = data_prostate_promise.load_without_preproc(data_orig_path + 'promise/',
-                                                                  data_proc_path,
-                                                                  sub_dataset,
+        image, label = data_prostate_promise.load_without_preproc(data_proc_path,
                                                                   subject_name)
 
     return image, label

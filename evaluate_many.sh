@@ -1,6 +1,5 @@
 #!/bin/bash
 test_anatomy='prostate'
-test_dataset='BMC'
 method=3
 daprob=0.5
 lamcons=1.0
@@ -17,13 +16,16 @@ else
     echo "I do not recognize this method."
 fi
 
-for cvfold in 1 2
+for cvfold in 1
 do
     for runnum in 1 2 3
     do
-        for alpha in 0.1 1.0 10.0 100.0
+        for alpha in 0.1 1.0 10.0
         do
-            sbatch /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.sh $cvfold $runnum $test_anatomy $test_dataset $heads $method $lamcons $alpha
+            for test_dataset in 'UCL' 'HK' 'BIDMC'
+            do
+                sbatch /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.sh $cvfold $runnum $test_anatomy $test_dataset $heads $method $lamcons $alpha
+            done
         done
     done
 done
