@@ -114,13 +114,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='prostate') # placenta / prostate
+    parser.add_argument('--dataset', default='placenta') # placenta / prostate
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--test_sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v2/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
@@ -129,7 +129,6 @@ if __name__ == "__main__":
     
     parser.add_argument('--model_has_heads', default=0, type=int)    
     parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
-    parser.add_argument('--lambda_data_aug', default=1.0, type=float) # weight for regularization loss (data augmentation)
     parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
     
@@ -230,7 +229,7 @@ if __name__ == "__main__":
             x_batch = np.expand_dims(x_batch, axis = 1)
             
             # send to gpu
-            x_batch_gpu = utils_data.make_torch_tensor_and_send_to_device(x_batch, device)
+            x_batch_gpu = utils_data.torch_and_send_to_device(x_batch, device)
             
             # make prediction
             outputs = model(x_batch_gpu)
