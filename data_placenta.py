@@ -66,6 +66,16 @@ def get_train_test_val_split_ids(cv_fold):
         train_test_val_split_ids['train'] = np.arange(50, 75, 1).tolist()
         train_test_val_split_ids['validation'] = np.arange(80, 85, 1).tolist()
 
+    elif cv_fold == 4: # 'larger training and validation datasets' | 'smaller test dataset'
+        train_test_val_split_ids['test'] = np.arange(0, 28, 1).tolist()
+        train_test_val_split_ids['train'] = np.arange(28, 53, 1).tolist()
+        train_test_val_split_ids['validation'] = np.arange(78, 88, 1).tolist()
+
+    elif cv_fold == 5: # 'largest training and validation datasets' | 'smaller test dataset'
+        train_test_val_split_ids['test'] = np.arange(0, 28, 1).tolist()
+        train_test_val_split_ids['train'] = np.arange(28, 78, 1).tolist()
+        train_test_val_split_ids['validation'] = np.arange(78, 88, 1).tolist()
+
     return train_test_val_split_ids
 
 # ==================================================
@@ -282,8 +292,8 @@ if __name__ == "__main__":
     # setup logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
-    cv_fold = 3 # 1 / 2 / 3
-    train_test_val = 'test' # train / validation / test
+    cv_fold = 5 # 1 / 2 / 3 / 4 / 5
+    train_test_val = 'train' # train / validation / test
     size = (128, 128)
     target_resolution = (1.0, 1.0)
     data_orig_path = '/data/vision/polina/projects/fetal/projects/placenta-segmentation/data/split-nifti-raw/' # orig data is here

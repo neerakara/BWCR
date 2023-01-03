@@ -27,8 +27,9 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/train.py \
 --data_aug_prob $5 \
 --model_has_heads $6 \
 --method_invariance $7 \
---lambda_consis $8 \
---alpha_layer $9
+--lambda_dataaug $8 \
+--lambda_consis $9 \
+--alpha_layer ${10}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

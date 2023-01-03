@@ -117,6 +117,7 @@ if __name__ == "__main__":
     
     parser.add_argument('--model_has_heads', default=0, type=int)    
     parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency in each layer (geom + int), 3: consistency in each layer (int)
+    parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
     parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
     
@@ -238,7 +239,7 @@ if __name__ == "__main__":
     logging.info('Defining losses')
     dice_loss_function = DiceLoss(include_background=False)
     dice_loss_function = dice_loss_function.to(device) 
-    if args.method_invariance in [2, 3]:
+    if args.method_invariance in [2, 3, 20, 30, 200, 300]:
         cons_loss_function = torch.nn.MSELoss()
         cons_loss_function = cons_loss_function.to(device) 
 
@@ -317,7 +318,7 @@ if __name__ == "__main__":
         # ===================================
         # Method 1: data augmentation
         # ===================================
-        elif args.method_invariance == 1:
+        elif args.method_invariance in [1, 10, 100]:
             
             # transform the batch
             inputs1_gpu, labels1_gpu, _ = utils_data.transform_batch(inputs_gpu,
@@ -342,9 +343,25 @@ if __name__ == "__main__":
             dice_loss_data_aug = dice_loss_function(outputs_probs1,
                                                     labels1_gpu_1hot)
 
-            # total loss
-            total_loss = dice_loss_data_aug
             writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
+
+            # =======================
+            # total loss |  typically, data augmentation is implemented like this
+            # =======================
+            if args.method_invariance == 1:
+                total_loss = dice_loss_data_aug
+
+            # =======================
+            # total loss | in the initial implementation, I had implemented data augmentation like this
+            # =======================
+            elif args.method_invariance == 10:
+                total_loss = dice_loss + args.lambda_dataaug * dice_loss_data_aug
+
+            # =======================
+            # total loss | We should divide by the total coeff to keep the loss scales comparable across methods
+            # =======================
+            elif args.method_invariance == 100:
+                total_loss = (dice_loss + args.lambda_dataaug * dice_loss_data_aug) / (1 + args.lambda_dataaug)
         
         # ===================================
         # Methods 2 / 3: consistency regularization applied in two different ways
@@ -352,7 +369,7 @@ if __name__ == "__main__":
         # Method 3: Same geometric transform is applied to each batch, so that consistency loss can be computed without inverting the transforms.
         # Two different intensity transforms are applied to the batch in both methods.
         # ===================================
-        elif args.method_invariance in [2, 3]: # consistency regularization at each layer
+        elif args.method_invariance in [2, 3, 20, 30, 200, 300]: # consistency regularization at each layer
 
             # transform the batch
             inputs1_gpu, labels1_gpu, t1 = utils_data.transform_batch(inputs_gpu,
@@ -361,14 +378,14 @@ if __name__ == "__main__":
                                                                       device = device)
 
             # apply same geometric transform on both batches
-            if args.method_invariance == 3:
+            if args.method_invariance in [3, 30, 300]:
                 inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs_gpu,
                                                                           labels_gpu,
                                                                           data_aug_prob = args.data_aug_prob,
                                                                           device = device,
                                                                           t = t1)
             # apply different geometric transforms on both batches
-            elif args.method_invariance == 2:
+            elif args.method_invariance in [2, 20, 200]:
                 inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs_gpu,
                                                                           labels_gpu,
                                                                           data_aug_prob = args.data_aug_prob,
@@ -406,12 +423,12 @@ if __name__ == "__main__":
             
             for l in range(num_layers):
             
-                if args.method_invariance == 3:
+                if args.method_invariance in [3, 30, 300]:
                     # same geometric transform on both batches, so no need to invert
                     cons_loss_layer_l.append(cons_loss_function(model_outputs1[l],
                                                                 model_outputs2[l]))
             
-                elif args.method_invariance == 2:
+                elif args.method_invariance in [2, 20, 200]:
                     # different geometric transforms on both batches, so need to invert
                     cons_loss_layer_l.append(cons_loss_function(utils_data.invert_geometric_transforms(model_outputs1[l], t1),
                                                                 utils_data.invert_geometric_transforms(model_outputs2[l], t2)))
@@ -426,7 +443,12 @@ if __name__ == "__main__":
             writer.add_scalar("TRAINING/ConsistencyLossPerBatch", loss_consistency, iteration+1)
             
             # total loss
-            total_loss = (dice_loss_data_aug + loss_consistency) / (1 + sum(weight_layer_l))
+            if args.method_invariance in [2, 3]:                
+                total_loss = (dice_loss_data_aug + loss_consistency) / (1 + sum(weight_layer_l))
+            elif args.method_invariance in [20, 30]:
+                total_loss = (dice_loss + loss_consistency) / (1 + sum(weight_layer_l))
+            elif args.method_invariance in [200, 300]:
+                total_loss = (dice_loss + args.lambda_dataaug * dice_loss_data_aug + loss_consistency) / (1 + args.lambda_dataaug + sum(weight_layer_l))
         
         # total loss to tensorboard
         writer.add_scalar("TRAINING/TotalLossPerBatch", total_loss, iteration+1)
@@ -444,7 +466,7 @@ if __name__ == "__main__":
                                    utils_vis.show_images_labels_predictions(inputs1_gpu, labels1_gpu_1hot, outputs_probs1),
                                    global_step = iteration+1)
 
-            if args.method_invariance in [2, 3]:
+            if args.method_invariance in [2, 3, 20, 30, 200, 300]:
                 writer.add_figure('TrainingTransformed2',
                                    utils_vis.show_images_labels_predictions(inputs2_gpu, labels2_gpu_1hot, outputs_probs2),
                                    global_step = iteration+1)

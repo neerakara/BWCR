@@ -127,10 +127,11 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--batch_size_test', default=4, type=int)
     
-    parser.add_argument('--model_has_heads', default=0, type=int)    
-    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
-    parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
-    parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
+    parser.add_argument('--model_has_heads', default=1, type=int)    
+    parser.add_argument('--method_invariance', default=3, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
+    parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
+    parser.add_argument('--lambda_consis', default=0.1, type=float) # weight for regularization loss (consistency overall)
+    parser.add_argument('--alpha_layer', default=100.0, type=float) # growth of regularization loss weight with network depth
     
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    

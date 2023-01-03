@@ -26,8 +26,9 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
 --test_sub_dataset $4 \
 --model_has_heads $5 \
 --method_invariance $6 \
---lambda_consis $7 \
---alpha_layer $8
+--lambda_dataaug $7 \
+--lambda_consis $8 \
+--alpha_layer $9
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."
