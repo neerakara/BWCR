@@ -91,6 +91,18 @@ def normalize_intensities(array, percentile_min = 2, percentile_max = 98):
     return normalized_array
 
 # ==================================================
+# linear scaling for FLAIR images
+# ==================================================
+def normalize_intensities_flair(array, percentile_min = 2):
+
+    low = np.percentile(array, percentile_min)
+    histogram, bin_edges = np.histogram(array, bins=512)
+    high = bin_edges[np.argsort(histogram)[-2]]
+    normalized_array = 0.75 * (array - low) / (high-low)
+
+    return normalized_array
+
+# ==================================================
 # sample a random batch
 # ==================================================
 def get_batch(images,
@@ -365,6 +377,33 @@ def apply_geometric_transforms_torch(images,
                          interpolation = tt.InterpolationMode.NEAREST)    
     
     return images_t, labels_t, t
+
+# ==================================================
+# ==================================================
+def apply_geometric_transforms_mask(mask, t):
+
+    return TF.affine(mask,
+                     angle=t[0],
+                     translate=[t[1], t[2]],
+                     scale=t[3],
+                     shear=[t[4], t[5]],
+                     interpolation = tt.InterpolationMode.NEAREST)
+
+# ==================================================
+# ==================================================
+def invert_geometric_transforms_mask(mask, t):
+
+    return TF.affine(mask,
+                     angle=-t[0],
+                     translate=[-t[1], -t[2]],
+                     scale=1 / t[3],
+                     shear=[-t[4], -t[5]],
+                     interpolation = transforms.InterpolationMode.BILINEAR)
+
+# ==================================================
+# ==================================================
+def rescale_tensor(t, newsize):
+    return TF.resize(t, newsize)
 
 # ==================================================
 # ==================================================

@@ -10,6 +10,8 @@ def make_expdir(args):
         logdir = args.save_path + args.dataset + '_cv' + str(args.cv_fold_num) + '/' 
     elif args.dataset == 'prostate':
         logdir = args.save_path + args.dataset + '_' + args.sub_dataset + '_cv' + str(args.cv_fold_num) + '/'
+    elif args.dataset == 'ms':
+        logdir = args.save_path + args.dataset + '/'
 
     # optimization related
     logdir = logdir + 'lr' + str(args.lr) + '_bsize' + str(args.batch_size) + '/' 
@@ -29,9 +31,15 @@ def make_expdir(args):
     elif args.method_invariance in [10, 100]: # data augmentation (initial implementation)
         logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '/'
     elif args.method_invariance in [2, 3, 20, 30]: # consistency regularization per layer
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
+        if args.consis_loss != 1:
+            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '_loss' + str(args.consis_loss) + '/'
+        else:
+            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
     elif args.method_invariance in [200, 300]: # consistency regularization per layer
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
+        if args.consis_loss != 1:
+            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '_loss' + str(args.consis_loss) + '/'
+        else:
+            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
 
     # run number
     logdir = logdir + 'run' + str(args.run_number) + '/'

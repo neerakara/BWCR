@@ -120,7 +120,7 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v2/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v3/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
@@ -130,6 +130,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_has_heads', default=1, type=int)    
     parser.add_argument('--method_invariance', default=3, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
     parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
+    parser.add_argument('--consis_loss', default=1, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
     parser.add_argument('--lambda_consis', default=0.1, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=100.0, type=float) # growth of regularization loss weight with network depth
     

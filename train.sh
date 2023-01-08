@@ -29,7 +29,8 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/train.py \
 --method_invariance $7 \
 --lambda_dataaug $8 \
 --lambda_consis $9 \
---alpha_layer ${10}
+--consis_loss ${10} \
+--alpha_layer ${11}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

@@ -8,7 +8,7 @@
 ## SLURM Variables:
 #SBATCH  --output=/data/scratch/nkarani/logs/%j.out
 #SBATCH  --partition=gpu
-#SBATCH  --exclude=anise,curcum,sumac,fennel,rosemary,urfa-biber,marjoram,mint
+#SBATCH  --exclude=anise,curcum,sumac,fennel,rosemary,urfa-biber,marjoram,mint,peppermint
 #SBATCH  --gres=gpu:1
 #SBATCH  --cpus-per-task=8
 #SBATCH  --mem=16G
@@ -28,7 +28,8 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
 --method_invariance $6 \
 --lambda_dataaug $7 \
 --lambda_consis $8 \
---alpha_layer $9
+--consis_loss $9 \
+--alpha_layer ${10}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

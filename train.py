@@ -11,6 +11,8 @@ import torch
 import torch.nn as nn
 # monai makes life easier
 from monai.losses.dice import DiceLoss
+from monai.losses.ssim_loss import SSIMLoss
+# https://docs.monai.io/en/stable/losses.html#monai.losses.ssim_loss.SSIMLoss
 from torch.utils.tensorboard import SummaryWriter
 # self-defined stuff
 import models 
@@ -101,11 +103,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='placenta') # placenta / prostate
-    parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
+    parser.add_argument('--dataset', default='prostate') # placenta / prostate / ms
+    parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v2/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v3/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
@@ -115,9 +117,10 @@ if __name__ == "__main__":
     parser.add_argument('--eval_frequency', default=5000, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
     
-    parser.add_argument('--model_has_heads', default=0, type=int)    
-    parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency in each layer (geom + int), 3: consistency in each layer (int)
+    parser.add_argument('--model_has_heads', default=1, type=int)    
+    parser.add_argument('--method_invariance', default=2, type=int) # 0: no reg, 1: data aug, 2: consistency in each layer (geom + int), 3: consistency in each layer (int)
     parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
+    parser.add_argument('--consis_loss', default=1, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
     parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
     
@@ -240,7 +243,7 @@ if __name__ == "__main__":
     dice_loss_function = DiceLoss(include_background=False)
     dice_loss_function = dice_loss_function.to(device) 
     if args.method_invariance in [2, 3, 20, 30, 200, 300]:
-        cons_loss_function = torch.nn.MSELoss()
+        cons_loss_function = torch.nn.MSELoss(reduction='sum') # sum of squared errors to remove magnitude dependence on image size
         cons_loss_function = cons_loss_function.to(device) 
 
     # ===================================
@@ -306,7 +309,7 @@ if __name__ == "__main__":
         writer.add_scalar("TRAINING/DiceLossPerBatch", dice_loss, iteration+1)
 
         # ===================================
-        # add additional regularization losses, according to the chosen method
+        # additional regularization losses, according to the chosen method
         # ===================================
 
         # ===================================
@@ -393,24 +396,16 @@ if __name__ == "__main__":
 
             # visualize training samples
             if iteration < 5:
-                utils_vis.save_images_and_labels(inputs1_gpu,
-                                                 labels1_gpu,
-                                                 vis_path + 't1_iter' + str(iteration) + '.png')
-                utils_vis.save_images_and_labels(inputs2_gpu,
-                                                 labels2_gpu,
-                                                 vis_path + 't2_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs2_gpu, labels2_gpu, vis_path + 't2_iter' + str(iteration) + '.png')
 
             # convert labels to 1hot
-            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu,
-                                                            args.num_labels)
-            labels2_gpu_1hot = utils_data.make_label_onehot(labels2_gpu,
-                                                            args.num_labels)
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
+            labels2_gpu_1hot = utils_data.make_label_onehot(labels2_gpu, args.num_labels)
             
             # compute predictions for both the transformed batches
-            model_outputs1, outputs_probs1 = get_probs_and_outputs(model,
-                                                                   inputs1_gpu)
-            model_outputs2, outputs_probs2 = get_probs_and_outputs(model,
-                                                                   inputs2_gpu)        
+            model_outputs1, outputs_probs1 = get_probs_and_outputs(model, inputs1_gpu)
+            model_outputs2, outputs_probs2 = get_probs_and_outputs(model, inputs2_gpu)        
 
             # loss on data aug samples (one of the two transformations)
             dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
@@ -420,22 +415,52 @@ if __name__ == "__main__":
             cons_loss_layer_l = []
             weight_layer_l = []
             num_layers = len(model_outputs1)
+
+            if args.method_invariance in [2, 20, 200]:
+                # generate mask to compute loss, excluding pixels introduced by the geometric transforms
+                mask1_gpu = utils_data.apply_geometric_transforms_mask(torch.ones(inputs1_gpu.shape).to(device, dtype = torch.float), t1)
+                mask2_gpu = utils_data.apply_geometric_transforms_mask(torch.ones(inputs2_gpu.shape).to(device, dtype = torch.float), t2)
             
             for l in range(num_layers):
             
                 if args.method_invariance in [3, 30, 300]:
                     # same geometric transform on both batches, so no need to invert
-                    cons_loss_layer_l.append(cons_loss_function(model_outputs1[l],
-                                                                model_outputs2[l]))
+                    if args.consis_loss == 1:
+                        cons_loss_layer_l.append(cons_loss_function(model_outputs1[l], model_outputs2[l]))
+                    elif args.consis_loss == 2: # mse between normalized features
+                        cons_loss_layer_l.append(cons_loss_function(torch.nn.functional.normalize(model_outputs1[l], dim=(1,2,3)),
+                                                                    torch.nn.functional.normalize(model_outputs2[l], dim=(1,2,3))))
             
                 elif args.method_invariance in [2, 20, 200]:
                     # different geometric transforms on both batches, so need to invert
-                    cons_loss_layer_l.append(cons_loss_function(utils_data.invert_geometric_transforms(model_outputs1[l], t1),
-                                                                utils_data.invert_geometric_transforms(model_outputs2[l], t2)))
+                    features1_inv = utils_data.invert_geometric_transforms(model_outputs1[l], t1)
+                    features2_inv = utils_data.invert_geometric_transforms(model_outputs2[l], t2)
+                    mask1_resized = utils_data.rescale_tensor(mask1_gpu, features1_inv.shape[-1])
+                    mask2_resized = utils_data.rescale_tensor(mask2_gpu, features2_inv.shape[-1])
+                    mask1_gpu_inv = utils_data.invert_geometric_transforms_mask(mask1_resized, t1)
+                    mask2_gpu_inv = utils_data.invert_geometric_transforms_mask(mask2_resized, t2)
+                    mask = torch.mul(mask1_gpu_inv, mask2_gpu_inv)
+                    features1_inv_masked = torch.mul(features1_inv, mask)
+                    features2_inv_masked = torch.mul(features2_inv, mask)
+
+                    if args.consis_loss == 1:
+                        cons_loss_layer_l.append(cons_loss_function(features1_inv_masked, features2_inv_masked))
+                    elif args.consis_loss == 2: # mse between normalized features
+                        cons_loss_layer_l.append(cons_loss_function(torch.nn.functional.normalize(features1_inv_masked, dim=(1,2,3)),
+                                                                    torch.nn.functional.normalize(features2_inv_masked, dim=(1,2,3))))
+
+                    if iteration % 5000 == 0:
+                        utils_vis.save_from_list([features1_inv_masked,
+                                                  features2_inv_masked,
+                                                  features1_inv_masked - features2_inv_masked],
+                                                 vis_path + 'feats_inv_correctly_iter' + str(iteration) + '_l' + str(l+1) + '.png')
             
-                weight_layer_l.append(args.lambda_consis * (((l+1) / num_layers) ** args.alpha_layer))
-            
+                weight_layer_l.append((((l+1) / num_layers) ** args.alpha_layer))
                 writer.add_scalar("TRAINING/ConsistencyLossPerBatchLayer"+str(l+1), cons_loss_layer_l[l], iteration+1)
+
+            total_weight = sum(weight_layer_l)
+            for l in range(num_layers):    
+                weight_layer_l[l] = args.lambda_consis * weight_layer_l[l] / total_weight
                 writer.add_scalar("TRAINING/ConsistencyLossWeightLayer"+str(l+1), weight_layer_l[l], iteration+1)
             
             # total consistency loss
@@ -491,7 +516,7 @@ if __name__ == "__main__":
         # ===================================
         # evaluate on entire training and validation sets every once in a while
         # ===================================
-        if iteration % args.eval_frequency == 0:
+        if iteration > 0 and iteration % args.eval_frequency == 0:
             dice_score_tr, dice_score_vl = evaluate(args,
                                                     model,
                                                     images_tr,

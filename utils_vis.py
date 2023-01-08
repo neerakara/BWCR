@@ -130,6 +130,38 @@ def save_images_and_labels(images,
 
 # ==========================================================
 # ==========================================================
+def save_from_list(list_of_things,
+                   savefilename,
+                   normalize = False,
+                   rot90_k = -1):
+    
+    num_things = len(list_of_things)
+    tmp_list = []
+
+    for thing in list_of_things:
+        tmp_list.append(thing.detach().cpu().numpy())
+
+
+    plt.figure(figsize=(6*num_things, 24))
+
+    # show 4 examples per batch
+    for batch_index in range(4):
+        i = 1
+        for thing in tmp_list:
+            if normalize == True:
+                im = normalize_img_for_vis(thing[batch_index,0,:,:])
+            else:
+                im = thing[batch_index,0,:,:]
+            if rot90_k != 0:
+                im = np.rot90(im, k=rot90_k)
+            plt.subplot(4, num_things, num_things*batch_index + i, xticks=[], yticks=[]); plt.imshow(im, cmap = 'gray'); plt.colorbar()
+            i = i + 1
+    plt.savefig(savefilename, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+# ==========================================================
+# ==========================================================
 def normalize_img_for_vis(img):
 
     if np.percentile(img, 99) == np.percentile(img, 1):
