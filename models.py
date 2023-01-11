@@ -104,7 +104,12 @@ class OutConvBlock3d(nn.Module):
 # ======================================================
 class UNet2d(nn.Module):
 
-    def __init__(self, in_channels = 1, num_labels = 1, squeeze = False):
+    def __init__(self,
+                 in_channels = 1,
+                 num_labels = 1,
+                 squeeze = False,
+                 returnlist = 1): # 1 heads_and_logits, 2 features_and_logits
+
         super(UNet2d, self).__init__()
         n0 = 16        
         # downsampling and upsampling blocks / layers
@@ -124,6 +129,8 @@ class UNet2d(nn.Module):
         self.out_conv = OutConvBlock2d(n0, num_labels)
         # squeeze
         self.squeeze = squeeze
+        # what to return
+        self.returnlist = returnlist
 
     def forward(self, x):
         debugging = False
@@ -172,13 +179,20 @@ class UNet2d(nn.Module):
         if self.squeeze:
             x18 = x18.squeeze(1)
 
-        return [x18]
+        if self.returnlist == 1:
+            return [x18]
+        else:
+            return [x1, x3, x5, x7, x9, x11, x13, x15, x17, x18]
 
 # ======================================================
 # 2d UNet with heads for consistency reg at each layer
 # ======================================================
 class UNet2d_with_heads(nn.Module):
-    def __init__(self, in_channels = 1, num_labels = 1, squeeze = False):
+    def __init__(self,
+                 in_channels = 1,
+                 num_labels = 1,
+                 squeeze = False,
+                 returnlist = 1): # 1 heads_and_logits, 2 features_and_logits
 
         super(UNet2d_with_heads, self).__init__()        
         n0 = 16        
@@ -209,6 +223,8 @@ class UNet2d_with_heads(nn.Module):
         self.head9 = HeadBlock2d(n0, n0)
         # squeeze
         self.squeeze = squeeze
+        # what to return
+        self.returnlist = returnlist
 
     def forward(self, x):
         debugging = False
@@ -276,7 +292,10 @@ class UNet2d_with_heads(nn.Module):
         h9 = self.head9(x17)
         if debugging: logging.info('h9' + str(h9.shape))
 
-        return [h1, h2, h3, h4, h5, h6, h7, h8, h9, x18]
+        if self.returnlist == 1:
+            return [h1, h2, h3, h4, h5, h6, h7, h8, h9, x18]
+        else:
+            return [x1, x3, x5, x7, x9, x11, x13, x15, x17, x18]
 
 # ======================================================
 # A convolutional block of the head after which the consistency will be computed

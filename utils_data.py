@@ -98,7 +98,10 @@ def normalize_intensities_flair(array, percentile_min = 2):
     low = np.percentile(array, percentile_min)
     histogram, bin_edges = np.histogram(array, bins=512)
     high = bin_edges[np.argsort(histogram)[-2]]
-    normalized_array = 0.75 * (array - low) / (high-low)
+    normalized_array = 0.5 * (array - low) / (high-low)
+
+    normalized_array[normalized_array < 0.0] = 0.0
+    normalized_array[normalized_array > 1.0] = 1.0
 
     return normalized_array
 
@@ -218,6 +221,42 @@ def apply_intensity_transform(img, params):
 
 # ==================================================
 # ==================================================
+def get_param_range(pmin, pmax, num_values):
+    delta = (pmax-pmin) / (num_values-1)
+    return np.arange(pmin, pmax + delta, delta).tolist()
+
+# ==================================================
+# ==================================================
+def apply_intensity_transform_fixed(img,
+                                    device,
+                                    transform_number,
+                                    num_transforms):
+        
+    params = get_transform_params(0.5, device)
+    gamma_params = get_param_range(params['gamma_min'], params['gamma_max'], num_transforms)
+    scale_params = get_param_range(params['int_scale_min'], params['int_scale_max'], num_transforms)
+    shift_params = get_param_range(params['bright_min'], params['bright_max'], num_transforms)
+    blur_params_tmp = get_param_range(params['blur_min'], params['blur_max'], num_transforms)
+    blur_params = [round(item) for item in blur_params_tmp]
+    sharp_params = get_param_range(params['sharpen_min'], params['sharpen_max'], num_transforms)
+    noise_params = get_param_range(params['noise_min'], params['noise_max'], num_transforms)
+
+    for b in range(img.shape[0]):
+        # 1. gamma contrast
+        img[b,0,:,:] = gamma(img[b,0,:,:], params, c = gamma_params[transform_number])
+        # 2. intensity scaling and shift (brightness)
+        img[b,0,:,:] = scaleshift(img[b,0,:,:], params, s = scale_params[transform_number], b = shift_params[transform_number])
+        # 3. image quality - blur
+        img[b,0,:,:] = blur(img[b,0,:,:], params, k = blur_params[transform_number])
+        # 4. image quality - sharpen
+        img[b,0,:,:] = sharpen(img[b,0,:,:], params, a = sharp_params[transform_number], k1 = blur_params[transform_number] + 1, k2 = blur_params[transform_number])
+        # 5. image quality - noise
+        img[b,0,:,:] = noise(img[b,0,:,:], params, s = noise_params[transform_number])
+    
+    return img
+
+# ==================================================
+# ==================================================
 def crop_or_pad(slice, nx, ny):
     x, y = slice.shape
     x_s = (x - nx) // 2
@@ -276,32 +315,37 @@ def sample_from_uniform_integers(a,b):
 
 # ============================================================
 # ============================================================
-def gamma(image, params):
-    c = sample_from_uniform(params['gamma_min'], params['gamma_max'])
+def gamma(image, params, c = -1.0):
+    if c == -1.0:
+        c = sample_from_uniform(params['gamma_min'], params['gamma_max'])
     if DEBUGGING == 1: logging.info('doing gamma ' + str(c))
     return image**c
 
 # ============================================================
 # ============================================================
-def scaleshift(image, params):
-    s = sample_from_uniform(params['int_scale_min'], params['int_scale_max'])
-    b = sample_from_uniform(params['bright_min'], params['bright_max'])
+def scaleshift(image, params, s = -1.0, b = -1.0):
+    if s == -1.0:
+        s = sample_from_uniform(params['int_scale_min'], params['int_scale_max'])
+    if b == -1.0:
+        b = sample_from_uniform(params['bright_min'], params['bright_max'])
     if DEBUGGING == 1: logging.info('doing scaleshift ' + str(s) + ', ' + str(b))
     return image * s + b
 
 # ============================================================
 # ============================================================
-def blur(image, params):   
-    k = sample_from_uniform_integers(params['blur_min'], params['blur_max'])
+def blur(image, params, k = -1.0):
+    if k == -1.0:   
+        k = sample_from_uniform_integers(params['blur_min'], params['blur_max'])
     if DEBUGGING == 1: logging.info('doing blurring with kernel size ' + str(k))
     return torch.squeeze(TF.gaussian_blur(torch.unsqueeze(torch.unsqueeze(image, 0), 0), kernel_size = 2*k+1))
 
 # ============================================================
 # ============================================================
-def sharpen(image, params):
-    image1 = blur(image, params)
-    image2 = blur(image1, params)
-    a = sample_from_uniform(params['sharpen_min'], params['sharpen_max'])
+def sharpen(image, params, a = -1.0, k1 = -1.0, k2 = -1.0):
+    image1 = blur(image, params, k1)
+    image2 = blur(image1, params, k2)
+    if a == -1.0:
+        a = sample_from_uniform(params['sharpen_min'], params['sharpen_max'])
     if DEBUGGING == 1: logging.info('doing sharpening ' + str(a))
     image_sharp = image1 + (image1 - image2) * a
     image_sharp = (image_sharp - torch.min(image_sharp)) / (torch.max(image_sharp) - torch.min(image_sharp))
@@ -309,9 +353,10 @@ def sharpen(image, params):
 
 # ============================================================
 # ============================================================
-def noise(image, params):
+def noise(image, params, s = -1.0):
     if DEBUGGING == 1: logging.info('adding noise')
-    s = sample_from_uniform(params['noise_min'], params['noise_max'])
+    if s == -1.0:
+        s = sample_from_uniform(params['noise_min'], params['noise_max'])
     noise = torch.normal(0.0, s, size=image.shape).to(params['device'])
     image_noisy = image + noise
     image_noisy = (image_noisy - torch.min(image_noisy)) / (torch.max(image_noisy) - torch.min(image_noisy))
@@ -349,6 +394,9 @@ def transform_batch(images,
     
     for zz in range(images_t.shape[0]):
         images_t[zz, 0, :, :] = apply_intensity_transform(images_t[zz, 0, :, :], transform_params)
+
+    if torch.isnan(torch.mean(images_t)):
+        images_t, labels_t, t = transform_batch(images, labels, data_aug_prob, device, t)
     
     return images_t, labels_t, t
 

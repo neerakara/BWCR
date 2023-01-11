@@ -21,8 +21,16 @@ import csv
 # ==========================================
 def get_results(args):
     
-    num_runs = 3
-    results = np.zeros((40, num_runs))
+    if args.dataset == 'prostate':
+        test_subdatasets = ['BMC', 'UCL', 'HK', 'BIDMC']
+        num_test_subjects = 10
+        num_runs = 5
+    elif args.dataset == 'ms':
+        test_subdatasets = ['InD']
+        num_test_subjects = 33
+        num_runs = 3
+    
+    results = np.zeros((len(test_subdatasets) * num_test_subjects, num_runs))
     
     for r in range(num_runs):
     
@@ -32,7 +40,7 @@ def get_results(args):
 
         sub_num = 0
 
-        for test_subdataset in ['BMC', 'UCL', 'HK', 'BIDMC']:
+        for test_subdataset in test_subdatasets:
             
             results_filename = results_path + test_subdataset + '.csv'
 
@@ -41,13 +49,14 @@ def get_results(args):
                 csvreader = csv.reader(csvfile, delimiter=' ')
                 for row in csvreader:
                     rownum = rownum + 1
-                    if rownum > 2 and rownum < 13:
+                    if rownum > 2 and rownum < 3 + num_test_subjects:
                         results[sub_num, r] = row[0][row[0].find(',')+1:]
                         sub_num = sub_num + 1
 
-    # logging.info('=======================================')
-    # logging.info(args)
-    # logging.info(np.round(np.mean(results), 4))
+    logging.info('=======================================')
+    logging.info(args)
+    logging.info(np.round(np.mean(results), 3))
+    logging.info(np.round(np.std(results), 3))
 
     return results
 
@@ -110,7 +119,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='prostate') # placenta / prostate
+    parser.add_argument('--dataset', default='ms') # placenta / prostate / ms
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--test_sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
@@ -135,11 +144,15 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    for cv in [1, 2]:
+    for cv in [1]:
         args.cv_fold_num = cv
 
         # set method and relevant parameters in args
         # call function, passing args that gives you results of that method for all 40 subjects for all three runs in a (40,3) array
+        args.method_invariance = 0
+        args.model_has_heads = 0
+        results_m0 = get_results(args)
+
         args.method_invariance = 100
         args.model_has_heads = 0
         results_m100 = get_results(args)

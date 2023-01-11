@@ -32,6 +32,7 @@ def get_image_and_label_paths(data_path,
             data_path = data_path + train_test_val + '_out/'
     
     image_paths = []
+    brainmask_paths = []
     label_paths = []
     sub_names = []
     for filename in os.listdir(data_path):
@@ -39,9 +40,10 @@ def get_image_and_label_paths(data_path,
             sub_name = filename[:filename.find('_')]
             sub_names.append(sub_name)
             image_paths.append(data_path + str(sub_name) + '_FLAIR_isovox.nii.gz')
+            brainmask_paths.append(data_path + str(sub_name) + '_isovox_fg_mask.nii.gz')
             label_paths.append(data_path + str(sub_name) + '_gt_isovox.nii.gz')
 
-    return sub_names, image_paths, label_paths
+    return sub_names, image_paths, brainmask_paths, label_paths
 
 # ==================================================
 # count number of 2d slices in the 3d images of the reqeusted subject IDs
@@ -51,7 +53,8 @@ def count_total_slices(image_paths):
     num_slices = 0
     for image_path in image_paths:
         image = utils_data.load_nii(image_path)[0].astype(float)
-        num_slices = num_slices + image.shape[2]
+        num_zz = np.sum(image, axis=(0,1))
+        num_slices = num_slices + len(np.where(num_zz != 0)[0])
 
     return num_slices
 
@@ -72,15 +75,15 @@ def prepare_dataset(data_orig_path,
 
     # get paths of all images and labels for this subdataset
     if DEBUGGING == 1: logging.info('Reading image and label paths...')
-    sub_names_all, image_paths_all, label_paths_all = get_image_and_label_paths(data_orig_path,
-                                                                                sub_dataset,
-                                                                                train_test_val)
+    sub_names_all, image_paths_all, brain_mask_paths_all, label_paths_all = get_image_and_label_paths(data_orig_path,
+                                                                                                      sub_dataset,
+                                                                                                      train_test_val)
     
     # ===============================
     # count number of slices to pre-define dataset size
     # ===============================
     if DEBUGGING == 1: logging.info('Counting dataset size...')
-    num_slices = count_total_slices(image_paths_all)
+    num_slices = count_total_slices(brain_mask_paths_all)
 
     # ===============================
     # Create datasets for images and labels
@@ -119,6 +122,17 @@ def prepare_dataset(data_orig_path,
             print('image stats before norm (min, max, mean): ' + str(np.min(image)) + ', ' + str(np.max(image)) + ', ' + str(np.mean(image)))
     
         # ==================
+        # read the brain mask
+        # ==================
+        brainmask, _, _ = utils_data.load_nii(brain_mask_paths_all[n])          
+
+        # ==================
+        # remove slices with all zeros in the axial direction
+        # ==================
+        nonzero_slices = np.where(np.sum(brainmask, axis=(0,1)) != 0)[0]
+        image = image[:, :, nonzero_slices]
+
+        # ==================
         # normalize image intensities
         # ==================
         image = utils_data.normalize_intensities_flair(image)
@@ -134,6 +148,9 @@ def prepare_dataset(data_orig_path,
         label[label != 0.0] = 1.0
         if DEBUGGING == 1:
             print('number of unique labels: ' + str(np.unique(label)))
+        logging.info(label.shape)
+        label = label[:, :, nonzero_slices]
+        logging.info(label.shape)
 
         if DEBUGGING == 1:
             print(image_path)
@@ -157,6 +174,19 @@ def prepare_dataset(data_orig_path,
         # make in-plane resolution the same for all subjects
         # ==================
         # not doing this for placenta, as this is already the case in the raw images
+
+        # ==================
+        # for some subjects (from BEST), the orientation of axial slices is different than the rest
+        # ==================
+        logging.info(sub_name)
+        if sub_dataset == 'InD':
+            cond1 = (train_test_val == 'validation' and sub_name in ['6', '7'])
+            cond2 = (train_test_val == 'train' and sub_name in ['24', '25', '26', '27', '28', '29', '30', '31', '32', '33'])
+            cond3 = (train_test_val == 'test' and sub_name in ['25', '26', '27', '28', '29', '30', '31', '32', '33'])
+            if cond1 or cond2 or cond3:
+                for zz in range(image.shape[-1]):
+                    image[:, :, zz] = np.rot90(image[:, :, zz], 2)
+                    label[:, :, zz] = np.rot90(label[:, :, zz], 2)
 
         # ==================
         # write image and label to hdf5 file
@@ -227,7 +257,9 @@ def load_dataset(input_folder,
         prepare_dataset(input_folder,
                         data_filepath,
                         sub_dataset,
-                        train_test_val)
+                        train_test_val,
+                        size,
+                        target_resolution)
     else:
         logging.info('Already preprocessed. Loading now!')
 
@@ -256,7 +288,7 @@ if __name__ == "__main__":
 
     train_test_val = 'test' # train / validation / test
     sub_dataset = 'OoD' # InD / OoD
-    size = (256, 256)
+    size = (192, 192)
     target_resolution = (1.0, 1.0)
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/ms_lesions/shifts_ms/' # orig data is here
     data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/ms/' # save processed data here
@@ -307,10 +339,13 @@ if __name__ == "__main__":
 
         # plot
         plt.subplot(3, n, s + 1, xticks=[], yticks=[])
-        plt.imshow(np.rot90(normalize_img_for_vis(slice_image),k), cmap = 'gray')
+        plt.imshow(np.rot90(slice_image,k), cmap = 'gray')
+        plt.colorbar()
+        plt.title(subnames[s])
         plt.subplot(3, n, s + n + 1, xticks=[], yticks=[])
-        plt.imshow(np.rot90(normalize_img_for_vis(slice_label),k), cmap = 'gray')
-        plt.subplot(3, n, s + 2*n + 1, xticks=[], yticks=[])
+        plt.imshow(np.rot90(slice_label,k), cmap = 'gray')
+        plt.colorbar()
+        plt.subplot(3, n, s + 2*n + 1)
         plt.plot(bin_edges[0:-1], histogram) 
         plt.axvline(x = bin_edges[nwm], color = 'r')
         plt.ylim([0.0, 50000.0])

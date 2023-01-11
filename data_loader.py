@@ -51,7 +51,7 @@ def load_data(args,
                                     data_proc_path,
                                     sub_dataset, # InD / OoD
                                     train_test_val = train_test_val,
-                                    size = (256, 256),
+                                    size = (192, 192),
                                     target_resolution = (1.0, 1.0))
 
     return data

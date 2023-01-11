@@ -102,6 +102,85 @@ def show_images_labels_predictions(images,
 
 # ==========================================================
 # ==========================================================
+def get_title(layer_num):
+    if layer_num == 0:
+        t = 'Input'
+    elif layer_num == 11:
+        t = 'Output'
+    elif layer_num == 10:
+        t = 'Layer L'
+    else:
+        t = 'Layer L-' + str(10 - layer_num)
+    return t
+
+# clims for variance
+def get_clim(layer_num):
+    if layer_num == 0:
+        c = [0.0, 0.05]
+    elif layer_num == 11:
+        c = [0.0, 0.25]
+    elif layer_num == 10:
+        c = [0.0, 300.0]
+    else:
+        c = [0.0, 1.0]
+    return c
+
+# ==========================================================
+# ==========================================================
+def show_stats(stats,
+               vis_layers,
+               savepath):
+    nr = 1
+    nc = len(vis_layers)
+    plt.figure(figsize=(4*nc, 4*nr))
+    for l in range(len(vis_layers)):
+        stat_l = stats['layer' + str(vis_layers[l])]
+        plt.subplot(nr, nc, 0*nc + l + 1)
+        plt.axis('off')
+        plt.imshow(stat_l, cmap = 'gray')
+        # plt.clim(get_clim(vis_layers[l]))
+        plt.colorbar()
+        plt.title(get_title(vis_layers[l]) + ' ,' + str(np.round(np.mean(stat_l),2)))
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    
+# ==========================================================
+# ==========================================================
+def show_prediction_variation_2(means,
+                                vars,
+                                savepath):
+
+    # show_stats(means, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], savepath + '_means_all_layers.png')
+    # show_stats(vars, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], savepath + '_variances_all_layers.png')
+    show_stats(means, [0, 6, 7, 8, 9, 10, 11], savepath + '_means_decoder.png')
+    show_stats(vars, [0, 6, 7, 8, 9, 10, 11], savepath + '_variances_decoder.png')
+
+    return 0
+
+# ==========================================================
+# ==========================================================
+def show_prediction_variation(images,
+                              labels,
+                              pred_mean,
+                              pred_stddev,
+                              savepath):
+    
+    plt.figure(figsize=(24, 24))
+
+    # show 4 examples per batch
+    for batch_index in range(4):
+        plt.subplot(4, 4, 4*batch_index + 1); plt.imshow(images[batch_index,0,:,:], cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 4, 4*batch_index + 2); plt.imshow(labels[batch_index,0,:,:], cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 4, 4*batch_index + 3); plt.imshow(pred_mean[batch_index,0,:,:], cmap = 'gray'); plt.colorbar()
+        plt.subplot(4, 4, 4*batch_index + 4); plt.imshow(pred_stddev[batch_index,0,:,:], cmap = 'gray'); plt.colorbar()
+    
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+
+    return 0
+
+# ==========================================================
+# ==========================================================
 def save_images_and_labels(images,
                            labels,
                            savefilename,
@@ -140,7 +219,6 @@ def save_from_list(list_of_things,
 
     for thing in list_of_things:
         tmp_list.append(thing.detach().cpu().numpy())
-
 
     plt.figure(figsize=(6*num_things, 24))
 

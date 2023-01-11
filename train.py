@@ -395,7 +395,7 @@ if __name__ == "__main__":
                                                                           device = device)
 
             # visualize training samples
-            if iteration < 5:
+            if iteration < 10:
                 utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
                 utils_vis.save_images_and_labels(inputs2_gpu, labels2_gpu, vis_path + 't2_iter' + str(iteration) + '.png')
 
@@ -422,7 +422,7 @@ if __name__ == "__main__":
                 mask2_gpu = utils_data.apply_geometric_transforms_mask(torch.ones(inputs2_gpu.shape).to(device, dtype = torch.float), t2)
             
             for l in range(num_layers):
-            
+
                 if args.method_invariance in [3, 30, 300]:
                     # same geometric transform on both batches, so no need to invert
                     if args.consis_loss == 1:
@@ -450,7 +450,9 @@ if __name__ == "__main__":
                                                                     torch.nn.functional.normalize(features2_inv_masked, dim=(1,2,3))))
 
                     if iteration % 5000 == 0:
-                        utils_vis.save_from_list([features1_inv_masked,
+                        utils_vis.save_from_list([inputs1_gpu,
+                                                  inputs2_gpu,
+                                                  features1_inv_masked,
                                                   features2_inv_masked,
                                                   features1_inv_masked - features2_inv_masked],
                                                  vis_path + 'feats_inv_correctly_iter' + str(iteration) + '_l' + str(l+1) + '.png')

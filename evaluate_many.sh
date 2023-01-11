@@ -1,5 +1,5 @@
 #!/bin/bash
-test_anatomy='placenta'
+test_anatomy='ms'
 method=200
 daprob=0.5
 lamda=1.0
@@ -30,13 +30,13 @@ else
     echo "I do not recognize this method."
 fi
 
-for cvfold in 4 5
+for cvfold in 1
 do
-    for runnum in 1 2 3 4 5
+    for runnum in 1 2 3
     do
-        for lamcons in 0.001
+        for lamcons in 0.01 0.001
         do
-            for test_dataset in 'placenta'
+            for test_dataset in 'OoD' 'InD'
             do
                 sbatch /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.sh $cvfold $runnum $test_anatomy $test_dataset $heads $method $lamda $lamcons $consloss $alpha
             done

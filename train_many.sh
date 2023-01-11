@@ -1,11 +1,11 @@
 #!/bin/bash
 anatomy='ms'
 dataset='InD'
-method=0
+method=200
 consloss=2
 daprob=0.5
 lamda=1.0
-lamcons=0.001
+lamcons=0.01
 
 if [[ "$method" -eq 0 ]]; then
     heads=0
@@ -33,9 +33,9 @@ fi
 
 for cvfold in 1
 do
-    for runnum in 1 2 3
+    for runnum in 4 5
     do
-        for alpha in 100.0
+        for alpha in 100.0 10.0
         do
             sbatch /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $heads $method $lamda $lamcons $consloss $alpha
         done

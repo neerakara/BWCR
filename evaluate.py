@@ -289,7 +289,7 @@ if __name__ == "__main__":
                                                                             size = (data_test["nx"][sub], data_test["ny"][sub]),
                                                                             order = 0).astype(np.uint8)
 
-        elif args.dataset == 'placenta':
+        elif args.dataset in ['placenta', 'ms']:
             hard_prediction_orig_res_and_size = hard_prediction
             image_orig = subject_image
             label_orig = subject_label
@@ -306,7 +306,7 @@ if __name__ == "__main__":
         # ===================
         # visualize results
         # ===================
-        utils_vis.save_results(image_orig, label_orig, hard_prediction_orig_res_and_size, results_path + subject_name.decode('utf-8') + '.png')
+        utils_vis.save_results(image_orig, label_orig, hard_prediction_orig_res_and_size, results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
 
         # ===================
         # compute metrics
