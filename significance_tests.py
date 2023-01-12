@@ -22,13 +22,20 @@ import csv
 def get_results(args):
     
     if args.dataset == 'prostate':
-        test_subdatasets = ['BMC', 'UCL', 'HK', 'BIDMC']
+        if args.ind_vs_ood == 'ood':
+            test_subdatasets = ['BMC', 'UCL', 'HK', 'BIDMC']
+        elif args.ind_vs_ood == 'ind':
+            test_subdatasets = ['RUNMC']
         num_test_subjects = 10
         num_runs = 5
     elif args.dataset == 'ms':
-        test_subdatasets = ['InD']
-        num_test_subjects = 33
-        num_runs = 3
+        if args.ind_vs_ood == 'ood':
+            test_subdatasets = ['OoD']
+            num_test_subjects = 24
+        elif args.ind_vs_ood == 'ind':
+            test_subdatasets = ['InD']
+            num_test_subjects = 33
+        num_runs = 5
     
     results = np.zeros((len(test_subdatasets) * num_test_subjects, num_runs))
     
@@ -119,9 +126,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='ms') # placenta / prostate / ms
+    parser.add_argument('--dataset', default='prostate') # placenta / prostate / ms
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--test_sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
+    parser.add_argument('--ind_vs_ood', default='ood') # ind / ood
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
@@ -135,8 +143,8 @@ if __name__ == "__main__":
     parser.add_argument('--model_has_heads', default=0, type=int)    
     parser.add_argument('--method_invariance', default=100, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
     parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
-    parser.add_argument('--consis_loss', default=1, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
-    parser.add_argument('--lambda_consis', default=0.1, type=float) # weight for regularization loss (consistency overall)
+    parser.add_argument('--consis_loss', default=2, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
+    parser.add_argument('--lambda_consis', default=0.01, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=100.0, type=float) # growth of regularization loss weight with network depth
     
     parser.add_argument('--run_number', default=1, type=int)
@@ -144,48 +152,29 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    for cv in [1]:
+    for cv in [args.cv_fold_num]:
         args.cv_fold_num = cv
 
         # set method and relevant parameters in args
         # call function, passing args that gives you results of that method for all 40 subjects for all three runs in a (40,3) array
         args.method_invariance = 0
-        args.model_has_heads = 0
         results_m0 = get_results(args)
 
         args.method_invariance = 100
-        args.model_has_heads = 0
         results_m100 = get_results(args)
 
         args.method_invariance = 200
-        args.model_has_heads = 1
-        args.lambda_consis = 0.001
-        args.alpha_layer = 10.0
-        args.consis_loss = 2
-        results_m200_lam001_alpha10 = get_results(args)
+        args.alpha_layer = 100.0
+        results_m200_lam01_alpha100 = get_results(args)
 
         args.method_invariance = 200
-        args.model_has_heads = 1
-        args.lambda_consis = 0.01
         args.alpha_layer = 10.0
-        args.consis_loss = 2
         results_m200_lam01_alpha10 = get_results(args)
 
         args.method_invariance = 200
-        args.model_has_heads = 1
-        args.lambda_consis = 0.001
-        args.alpha_layer = 100.0
-        args.consis_loss = 2
-        results_m200_lam001_alpha100 = get_results(args)
+        args.alpha_layer = 1.0
+        results_m200_lam01_alpha1 = get_results(args)
 
-        args.method_invariance = 200
-        args.model_has_heads = 1
-        args.lambda_consis = 0.01
-        args.alpha_layer = 100.0
-        args.consis_loss = 2
-        results_m200_lam01_alpha100 = get_results(args)
-
-        compute_significance(results_m100, results_m200_lam001_alpha10, 'data aug', 'CR, lambda 0.001, alpha 10.0', cv)
-        compute_significance(results_m100, results_m200_lam01_alpha10, 'data aug', 'CR, lambda 0.01, alpha 10.0', cv)
-        compute_significance(results_m100, results_m200_lam001_alpha100, 'data aug', 'CR, lambda 0.001, alpha 100.0', cv)
         compute_significance(results_m100, results_m200_lam01_alpha100, 'data aug', 'CR, lambda 0.01, alpha 100.0', cv)
+        compute_significance(results_m100, results_m200_lam01_alpha10, 'data aug', 'CR, lambda 0.01, alpha 10.0', cv)
+        compute_significance(results_m100, results_m200_lam01_alpha1, 'data aug', 'CR, lambda 0.01, alpha 1.0', cv)

@@ -440,6 +440,7 @@ if __name__ == "__main__":
                     mask1_gpu_inv = utils_data.invert_geometric_transforms_mask(mask1_resized, t1)
                     mask2_gpu_inv = utils_data.invert_geometric_transforms_mask(mask2_resized, t2)
                     mask = torch.mul(mask1_gpu_inv, mask2_gpu_inv)
+                    mask = mask.repeat(1,features1_inv.shape[1],1,1)
                     features1_inv_masked = torch.mul(features1_inv, mask)
                     features2_inv_masked = torch.mul(features2_inv, mask)
 

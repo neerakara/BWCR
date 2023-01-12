@@ -42,9 +42,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='ms') # placenta / prostate
+    parser.add_argument('--dataset', default='prostate') # placenta / prostate
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
-    parser.add_argument('--test_sub_dataset', default='InD') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
+    parser.add_argument('--test_sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=2, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument('--method_invariance', default=0, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
     parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
     parser.add_argument('--consis_loss', default=2, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
-    parser.add_argument('--lambda_consis', default=0.001, type=float) # weight for regularization loss (consistency overall)
+    parser.add_argument('--lambda_consis', default=0.01, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=10.0, type=float) # growth of regularization loss weight with network depth
     
     parser.add_argument('--run_number', default=1, type=int)
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     subject_dices = []
     stddevs = []
     
-    for sub in range(5):#(num_subjects_ts):
+    for sub in range(num_subjects_ts):
     
         subject_name = subject_names_ts[sub]
         subject_image = images_ts[:, :, int(np.sum(depths_ts[:sub])) : int(np.sum(depths_ts[:sub+1]))]
