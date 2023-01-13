@@ -98,10 +98,11 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v3/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--batch_size_test', default=4, type=int)
     
@@ -114,6 +115,8 @@ if __name__ == "__main__":
     
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
+
+    parser.add_argument('--model_prefix', default='model') # model_best_dice / model
     
     args = parser.parse_args()
 
@@ -168,7 +171,7 @@ if __name__ == "__main__":
     # ===================================
     # load model weights
     # ===================================
-    modelpath = utils_generic.get_best_modelpath(models_path, 'model_best_dice')
+    modelpath = utils_generic.get_best_modelpath(models_path, args.model_prefix)
     logging.info('loading model weights from: ')
     logging.info(modelpath)
     model.load_state_dict(torch.load(modelpath)['state_dict'])
@@ -284,7 +287,10 @@ if __name__ == "__main__":
         # ===================
         # visualize results
         # ===================
-        utils_vis.save_results(image_orig, label_orig, hard_prediction_orig_res_and_size, results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
+        utils_vis.save_results(image_orig,
+                               label_orig,
+                               hard_prediction_orig_res_and_size,
+                               results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
 
         # ===================
         # compute metrics

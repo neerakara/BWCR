@@ -27,7 +27,7 @@ def get_results(args):
         elif args.ind_vs_ood == 'ind':
             test_subdatasets = ['RUNMC']
         num_test_subjects = 10
-        num_runs = 5
+        num_runs = 3
     elif args.dataset == 'ms':
         if args.ind_vs_ood == 'ood':
             test_subdatasets = ['OoD']
@@ -35,7 +35,7 @@ def get_results(args):
         elif args.ind_vs_ood == 'ind':
             test_subdatasets = ['InD']
             num_test_subjects = 33
-        num_runs = 5
+        num_runs = 3
     
     results = np.zeros((len(test_subdatasets) * num_test_subjects, num_runs))
     
@@ -133,10 +133,11 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v3/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--batch_size_test', default=4, type=int)
     
@@ -163,18 +164,18 @@ if __name__ == "__main__":
         args.method_invariance = 100
         results_m100 = get_results(args)
 
-        args.method_invariance = 200
-        args.alpha_layer = 100.0
-        results_m200_lam01_alpha100 = get_results(args)
+        # args.method_invariance = 200
+        # args.alpha_layer = 100.0
+        # results_m200_lam01_alpha100 = get_results(args)
 
         args.method_invariance = 200
         args.alpha_layer = 10.0
         results_m200_lam01_alpha10 = get_results(args)
 
-        args.method_invariance = 200
-        args.alpha_layer = 1.0
-        results_m200_lam01_alpha1 = get_results(args)
+        # args.method_invariance = 200
+        # args.alpha_layer = 1.0
+        # results_m200_lam01_alpha1 = get_results(args)
 
-        compute_significance(results_m100, results_m200_lam01_alpha100, 'data aug', 'CR, lambda 0.01, alpha 100.0', cv)
+        # compute_significance(results_m100, results_m200_lam01_alpha100, 'data aug', 'CR, lambda 0.01, alpha 100.0', cv)
         compute_significance(results_m100, results_m200_lam01_alpha10, 'data aug', 'CR, lambda 0.01, alpha 10.0', cv)
-        compute_significance(results_m100, results_m200_lam01_alpha1, 'data aug', 'CR, lambda 0.01, alpha 1.0', cv)
+        # compute_significance(results_m100, results_m200_lam01_alpha1, 'data aug', 'CR, lambda 0.01, alpha 1.0', cv)

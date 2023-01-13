@@ -138,11 +138,11 @@ if __name__ == "__main__":
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
-    parser.add_argument('--lr_schedule', default=1, type=int)
+    parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--lr_schedule_step', default=15000, type=int)
     parser.add_argument('--lr_schedule_gamma', default=0.1, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=40001, type=int)
+    parser.add_argument('--max_iterations', default=30001, type=int)
     parser.add_argument('--log_frequency', default=500, type=int)
     parser.add_argument('--eval_frequency_tr', default=5000, type=int)
     parser.add_argument('--eval_frequency_vl', default=500, type=int)
@@ -290,6 +290,9 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
     if args.lr_schedule == 1:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_schedule_step, gamma=args.lr_schedule_gamma)
+    elif args.lr_schedule == 2:
+        lambda1 = lambda iteration: 1 - ((args.lr - 1e-6) * iteration / (args.max_iterations * args.lr))
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
 
     # ===================================
     # set model to train mode
@@ -554,7 +557,7 @@ if __name__ == "__main__":
         # x += -lr * x.grad
         # ===================================
         optimizer.step()
-        if args.lr_schedule == 1:
+        if args.lr_schedule != 0:
             scheduler.step()
             writer.add_scalar("Tr/lr", scheduler.get_last_lr()[0], iteration+1)
 
