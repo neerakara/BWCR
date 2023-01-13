@@ -101,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
+    parser.add_argument('--optimizer', default='adam') # adam / sgd
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--batch_size', default=16, type=int)
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
 
-    parser.add_argument('--model_prefix', default='model') # model_best_dice / model
+    parser.add_argument('--model_prefix', default='model') # best_val / model
     
     args = parser.parse_args()
 
@@ -139,7 +140,7 @@ if __name__ == "__main__":
     # ===================================
     logging_dir = utils_generic.make_expdir(args)
     models_path = logging_dir + 'models/'
-    results_path = logging_dir + 'results/'
+    results_path = logging_dir + 'results/' + args.model_prefix + '/'
     if not os.path.exists(results_path):
         os.makedirs(results_path)
 

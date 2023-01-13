@@ -43,7 +43,7 @@ def get_results(args):
     
         args.run_number = r+1
         logging_dir = utils_generic.make_expdir(args)
-        results_path = logging_dir + 'results/'
+        results_path = logging_dir + 'results/' + args.model_prefix + '/'
 
         sub_num = 0
 
@@ -136,6 +136,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
+    parser.add_argument('--optimizer', default='adam') # adam / sgd
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--batch_size', default=16, type=int)
@@ -151,6 +152,8 @@ if __name__ == "__main__":
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
     
+    parser.add_argument('--model_prefix', default='model') # best_val / model
+
     args = parser.parse_args()
 
     for cv in [args.cv_fold_num]:
@@ -164,18 +167,18 @@ if __name__ == "__main__":
         args.method_invariance = 100
         results_m100 = get_results(args)
 
-        # args.method_invariance = 200
-        # args.alpha_layer = 100.0
-        # results_m200_lam01_alpha100 = get_results(args)
+        args.method_invariance = 200
+        args.alpha_layer = 100.0
+        results_m200_lam01_alpha100 = get_results(args)
 
         args.method_invariance = 200
         args.alpha_layer = 10.0
         results_m200_lam01_alpha10 = get_results(args)
 
-        # args.method_invariance = 200
-        # args.alpha_layer = 1.0
-        # results_m200_lam01_alpha1 = get_results(args)
+        args.method_invariance = 200
+        args.alpha_layer = 1.0
+        results_m200_lam01_alpha1 = get_results(args)
 
-        # compute_significance(results_m100, results_m200_lam01_alpha100, 'data aug', 'CR, lambda 0.01, alpha 100.0', cv)
+        compute_significance(results_m100, results_m200_lam01_alpha100, 'data aug', 'CR, lambda 0.01, alpha 100.0', cv)
         compute_significance(results_m100, results_m200_lam01_alpha10, 'data aug', 'CR, lambda 0.01, alpha 10.0', cv)
-        # compute_significance(results_m100, results_m200_lam01_alpha1, 'data aug', 'CR, lambda 0.01, alpha 1.0', cv)
+        compute_significance(results_m100, results_m200_lam01_alpha1, 'data aug', 'CR, lambda 0.01, alpha 1.0', cv)

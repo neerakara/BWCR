@@ -134,15 +134,16 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v5/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
-    parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--optimizer', default='sgd') # adam / sgd
+    parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--lr_schedule_step', default=15000, type=int)
     parser.add_argument('--lr_schedule_gamma', default=0.1, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=30001, type=int)
+    parser.add_argument('--max_iterations', default=40001, type=int)
     parser.add_argument('--log_frequency', default=500, type=int)
     parser.add_argument('--eval_frequency_tr', default=5000, type=int)
     parser.add_argument('--eval_frequency_vl', default=500, type=int)
@@ -215,11 +216,15 @@ if __name__ == "__main__":
     logging.info('Reading training and validation data')
     data_tr = data_loader.load_data(args, args.sub_dataset, 'train')
     data_vl = data_loader.load_data(args, args.sub_dataset, 'validation')
-    data_ts_1 = data_loader.load_data(args, 'RUNMC', 'test') # 1
-    data_ts_2 = data_loader.load_data(args, 'BMC', 'test') # 2
-    data_ts_3 = data_loader.load_data(args, 'UCL', 'test') # 3
-    data_ts_4 = data_loader.load_data(args, 'HK', 'test') # 4
-    data_ts_5 = data_loader.load_data(args, 'BIDMC', 'test') # 5
+    if args.dataset == 'prostate':
+        data_ts_1 = data_loader.load_data(args, 'RUNMC', 'test') # 1
+        data_ts_2 = data_loader.load_data(args, 'BMC', 'test') # 2
+        data_ts_3 = data_loader.load_data(args, 'UCL', 'test') # 3
+        data_ts_4 = data_loader.load_data(args, 'HK', 'test') # 4
+        data_ts_5 = data_loader.load_data(args, 'BIDMC', 'test') # 5
+    elif args.dataset == 'ms':
+        data_ts_1 = data_loader.load_data(args, 'InD', 'test') # 1
+        data_ts_2 = data_loader.load_data(args, 'OoD', 'test') # 2
 
     images_tr = data_tr["images"]
     labels_tr = data_tr["labels"]
@@ -287,11 +292,14 @@ if __name__ == "__main__":
     # https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
     # ===================================
     logging.info('Defining optimizer')
-    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
+    if args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
+    elif args.optimizer == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
     if args.lr_schedule == 1:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_schedule_step, gamma=args.lr_schedule_gamma)
     elif args.lr_schedule == 2:
-        lambda1 = lambda iteration: 1 - ((args.lr - 1e-6) * iteration / (args.max_iterations * args.lr))
+        lambda1 = lambda iteration: 1 - ((args.lr - 1e-8) * iteration / (args.max_iterations * args.lr))
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
 
     # ===================================
@@ -573,20 +581,28 @@ if __name__ == "__main__":
             dice_score_vl = evaluate(args, model, images_vl, labels_vl, data_vl["depths"], device)
             writer.add_scalar("Tr/DiceVal", dice_score_vl, iteration+1)
 
-            dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
-            writer.add_scalar("Tr/DiceTest_RUNMC", dice_score_ts1, iteration+1)
+            if args.dataset == 'prostate':
+                dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
+                writer.add_scalar("Tr/DiceTest_RUNMC", dice_score_ts1, iteration+1)
 
-            dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
-            writer.add_scalar("Tr/DiceTest_BMC", dice_score_ts2, iteration+1)
+                dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
+                writer.add_scalar("Tr/DiceTest_BMC", dice_score_ts2, iteration+1)
 
-            dice_score_ts3 = evaluate(args, model, data_ts_3["images"], data_ts_3["labels"], data_ts_3["depths"], device)
-            writer.add_scalar("Tr/DiceTest_UCL", dice_score_ts3, iteration+1)
+                dice_score_ts3 = evaluate(args, model, data_ts_3["images"], data_ts_3["labels"], data_ts_3["depths"], device)
+                writer.add_scalar("Tr/DiceTest_UCL", dice_score_ts3, iteration+1)
 
-            dice_score_ts4 = evaluate(args, model, data_ts_4["images"], data_ts_4["labels"], data_ts_4["depths"], device)
-            writer.add_scalar("Tr/DiceTest_HK", dice_score_ts4, iteration+1)
+                dice_score_ts4 = evaluate(args, model, data_ts_4["images"], data_ts_4["labels"], data_ts_4["depths"], device)
+                writer.add_scalar("Tr/DiceTest_HK", dice_score_ts4, iteration+1)
 
-            dice_score_ts5 = evaluate(args, model, data_ts_5["images"], data_ts_5["labels"], data_ts_5["depths"], device)
-            writer.add_scalar("Tr/DiceTest_BIDMC", dice_score_ts5, iteration+1)
+                dice_score_ts5 = evaluate(args, model, data_ts_5["images"], data_ts_5["labels"], data_ts_5["depths"], device)
+                writer.add_scalar("Tr/DiceTest_BIDMC", dice_score_ts5, iteration+1)
+
+            elif args.dataset == 'ms':
+                dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
+                writer.add_scalar("Tr/DiceTest_InD", dice_score_ts1, iteration+1)
+
+                dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
+                writer.add_scalar("Tr/DiceTest_OoD", dice_score_ts2, iteration+1)
 
             # ===================================
             # save best model so far, according to performance on validation set
@@ -594,7 +610,7 @@ if __name__ == "__main__":
             if best_dice_score_vl <= dice_score_vl:
                 best_dice_score_vl = dice_score_vl
                 stuff_to_be_saved = {'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
-                model_name = 'model_best_dice_iter' + str(iteration) + '.pt'
+                model_name = 'best_val_iter' + str(iteration) + '.pt'
                 torch.save(stuff_to_be_saved, models_path + model_name)
                 logging.info('Found new best dice on val set: ' + str(best_dice_score_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
 
