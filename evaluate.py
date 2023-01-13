@@ -21,28 +21,6 @@ from medpy.metric.binary import assd as ASSD
 from medpy.metric.binary import hd as Hausdorff_Distance
 from medpy.metric.binary import hd95 as Hausdorff_Distance_95
 
-# ======================================================
-# ======================================================
-def dice(im1,
-         im2,
-         empty_score=1.0):
-    
-    im1 = im1 > 0.5
-    im2 = im2 > 0.5
-    
-    if im1.shape != im2.shape:
-        raise ValueError("Shape mismatch: im1 and im2 must have the same shape.")
-
-    im_sum = im1.sum() + im2.sum()
-    
-    if im_sum == 0:
-        return empty_score
-
-    # Compute Dice coefficient
-    intersection = np.logical_and(im1, im2)
-
-    return 2. * intersection.sum() / im_sum
-
 # ===================================================
 # Function to compute metrics
 # ===================================================
@@ -53,7 +31,7 @@ def compute_metrics(pred,
     scores = np.zeros(5, dtype = np.float32) 
     
     # dice    
-    d = dice(im1 = pred, im2 = label)
+    d = utils_generic.dice(im1 = pred, im2 = label)
 
     # hd, hd95 and assd
     if np.sum(pred) > 0:

@@ -14,7 +14,7 @@ def make_expdir(args):
         logdir = args.save_path + args.dataset + '/'
 
     # optimization related
-    logdir = logdir + 'lr' + str(args.lr) + '_bsize' + str(args.batch_size) + '/' 
+    logdir = logdir + 'lr' + str(args.lr) + '_sch' + str(args.lr_schedule) + '_bs' + str(args.batch_size) + '/' 
 
     # model related
     if args.model_has_heads == 1:
@@ -23,23 +23,23 @@ def make_expdir(args):
         logdir = logdir + 'unet/'
 
     # invariance method
-    logdir = logdir + 'method_invariance_' + str(args.method_invariance)
+    logdir = logdir + 'm' + str(args.method_invariance)
     if args.method_invariance == 0: # no regularization
         logdir = logdir + '/'
     elif args.method_invariance == 1: # data augmentation
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '/'
+        logdir = logdir + '_da' + str(args.data_aug_prob) + '/'
     elif args.method_invariance in [10, 100]: # data augmentation (initial implementation)
-        logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '/'
+        logdir = logdir + '_da' + str(args.data_aug_prob) + '_lda' + str(args.lambda_dataaug) + '/'
     elif args.method_invariance in [2, 3, 20, 30]: # consistency regularization per layer
         if args.consis_loss != 1:
-            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '_loss' + str(args.consis_loss) + '/'
+            logdir = logdir + '_da' + str(args.data_aug_prob) + '_lcon' + str(args.lambda_consis) + '_a' + str(args.alpha_layer) + '_l' + str(args.consis_loss) + '/'
         else:
-            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
+            logdir = logdir + '_da' + str(args.data_aug_prob) + '_lcon' + str(args.lambda_consis) + '_a' + str(args.alpha_layer) + '/'
     elif args.method_invariance in [200, 300]: # consistency regularization per layer
         if args.consis_loss != 1:
-            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '_loss' + str(args.consis_loss) + '/'
+            logdir = logdir + '_da' + str(args.data_aug_prob) + '_lda' + str(args.lambda_dataaug) + '_lcon' + str(args.lambda_consis) + '_a' + str(args.alpha_layer) + '_l' + str(args.consis_loss) + '/'
         else:
-            logdir = logdir + '_da_prob' + str(args.data_aug_prob) + '_lam_da' + str(args.lambda_dataaug) + '_lam_con' + str(args.lambda_consis) + '_alp' + str(args.alpha_layer) + '/'
+            logdir = logdir + '_da' + str(args.data_aug_prob) + '_lda' + str(args.lambda_dataaug) + '_lcon' + str(args.lambda_consis) + '_a' + str(args.alpha_layer) + '/'
 
     # run number
     logdir = logdir + 'run' + str(args.run_number) + '/'
@@ -68,4 +68,24 @@ def get_best_modelpath(models_path, prefix):
 
     return models_path + best_model
 
+# ======================================================
+# ======================================================
+def dice(im1,
+         im2,
+         empty_score=1.0):
     
+    im1 = im1 > 0.5
+    im2 = im2 > 0.5
+    
+    if im1.shape != im2.shape:
+        raise ValueError("Shape mismatch: im1 and im2 must have the same shape.")
+
+    im_sum = im1.sum() + im2.sum()
+    
+    if im_sum == 0:
+        return empty_score
+
+    # Compute Dice coefficient
+    intersection = np.logical_and(im1, im2)
+
+    return 2. * intersection.sum() / im_sum

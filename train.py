@@ -27,58 +27,85 @@ import data_loader
 # deviceCount = nvidia_smi.nvmlDeviceGetCount()
 
 # ======================================================
+# ======================================================
+def get_batch_subject(image,
+                      b,
+                      bs,
+                      device):
+
+    if (b+1) * bs < image.shape[-1]:
+        x_batch = image[:, :, b * bs : (b+1) * bs]
+    else:
+        x_batch = image[:, :, b * bs : ]
+
+    x_batch = np.expand_dims(np.swapaxes(np.swapaxes(x_batch, 2, 1), 1, 0), axis = 1)
+    
+    return utils_data.torch_and_send_to_device(x_batch, device)
+
+
+# ======================================================
+# ======================================================
+def compute_dice(image,
+                 label,
+                 model,
+                 args,
+                 device):
+
+    n_batches = np.ceil(image.shape[-1] / args.batch_size).astype(int)
+    
+    for b in range(n_batches):
+        x_batch = get_batch_subject(image,
+                                    b,
+                                    args.batch_size,
+                                    device)
+        
+        preds_gpu_this_batch = torch.nn.Softmax(dim=1)(model(x_batch)[-1])
+        
+        if b == 0:
+            preds_gpu = preds_gpu_this_batch
+        else:
+            preds_gpu = torch.cat((preds_gpu, preds_gpu_this_batch), dim = 0)
+
+    preds_soft = preds_gpu.detach().cpu().numpy()[:, 1, :, :]
+    preds_hard = (preds_soft > 0.5).astype(np.float32)
+    preds_hard = np.swapaxes(np.swapaxes(preds_hard, 0, 1), 1, 2)
+
+    return utils_generic.dice(im1 = preds_hard, im2 = label)
+
+# ======================================================
 # Function used to evaluate entire training / validation sets during training
 # ======================================================
 def evaluate(args,
              model,
-             images_tr,
-             labels_tr,
-             images_vl,
-             labels_vl,
-             device,
-             loss_function):
+             images,
+             labels,
+             depths,
+             device):
 
     # set model to evaluate mode
     model.eval()
 
     # initialize counters
-    dice_score_tr = 0.0
-    dice_score_vl = 0.0
+    dice_score = 0.0
 
-    # loop through the train set and evaluate each batch
+    num_subjects = depths.shape[0]
+
+    # loop through the train / validation / test set and evaluate each batch
     with torch.no_grad():
         
-        logging.info("Evaluating entire training dataset...")
-        n_batches_tr = images_tr.shape[-1] // args.batch_size
-        for iteration in range(n_batches_tr):
-            inputs_cpu, labels_cpu = utils_data.get_batch(images_tr,
-                                                          labels_tr,
-                                                          args.batch_size,
-                                                          batch_type = 'sequential',
-                                                          start_idx = iteration * args.batch_size)
-            inputs_gpu = utils_data.torch_and_send_to_device(inputs_cpu, device)
-            labels_gpu = utils_data.torch_and_send_to_device(labels_cpu, device)
-            labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
-            # inputs, labels_one_hot = utils_data.make_torch_tensors_and_send_to_device(inputs, labels, device, args.num_labels)
-            dice_score_tr = dice_score_tr + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs_gpu)[-1]), labels_gpu_1hot))
+        for sub in range(num_subjects):
+            sub_start = int(np.sum(depths[:sub]))
+            sub_end = int(np.sum(depths[:sub+1]))
+            dice_score = dice_score + compute_dice(images[:,:,sub_start:sub_end], 
+                                                   labels[:,:,sub_start:sub_end],
+                                                   model,
+                                                   args,
+                                                   device)
 
-        logging.info("Evaluating entire validation dataset...")
-        n_batches_vl = images_vl.shape[-1] // args.batch_size
-        for iteration in range(n_batches_vl):
-            inputs_cpu, labels_cpu = utils_data.get_batch(images_vl,
-                                                          labels_vl,
-                                                          args.batch_size,
-                                                          batch_type = 'sequential',
-                                                          start_idx = iteration * args.batch_size)
-            inputs_gpu = utils_data.torch_and_send_to_device(inputs_cpu, device)
-            labels_gpu = utils_data.torch_and_send_to_device(labels_cpu, device)
-            labels_gpu_1hot = utils_data.make_label_onehot(labels_gpu, args.num_labels)
-            dice_score_vl = dice_score_vl + (1 - loss_function(torch.nn.Softmax(dim=1)(model(inputs_gpu)[-1]), labels_gpu_1hot))
-    
     # set model back to training mode
     model.train()
 
-    return dice_score_tr / n_batches_tr, dice_score_vl / n_batches_vl
+    return dice_score / num_subjects
 
 # ==========================================
 # ==========================================
@@ -107,14 +134,18 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v3/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--lr_schedule', default=1, type=int)
+    parser.add_argument('--lr_schedule_step', default=15000, type=int)
+    parser.add_argument('--lr_schedule_gamma', default=0.1, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=50001, type=int)
+    parser.add_argument('--max_iterations', default=40001, type=int)
     parser.add_argument('--log_frequency', default=500, type=int)
-    parser.add_argument('--eval_frequency', default=5000, type=int)
+    parser.add_argument('--eval_frequency_tr', default=5000, type=int)
+    parser.add_argument('--eval_frequency_vl', default=500, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
     
     parser.add_argument('--model_has_heads', default=1, type=int)    
@@ -184,6 +215,11 @@ if __name__ == "__main__":
     logging.info('Reading training and validation data')
     data_tr = data_loader.load_data(args, args.sub_dataset, 'train')
     data_vl = data_loader.load_data(args, args.sub_dataset, 'validation')
+    data_ts_1 = data_loader.load_data(args, 'RUNMC', 'test') # 1
+    data_ts_2 = data_loader.load_data(args, 'BMC', 'test') # 2
+    data_ts_3 = data_loader.load_data(args, 'UCL', 'test') # 3
+    data_ts_4 = data_loader.load_data(args, 'HK', 'test') # 4
+    data_ts_5 = data_loader.load_data(args, 'BIDMC', 'test') # 5
 
     images_tr = data_tr["images"]
     labels_tr = data_tr["labels"]
@@ -248,9 +284,12 @@ if __name__ == "__main__":
 
     # ===================================
     # define optimizer
+    # https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
     # ===================================
     logging.info('Defining optimizer')
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
+    if args.lr_schedule == 1:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_schedule_step, gamma=args.lr_schedule_gamma)
 
     # ===================================
     # set model to train mode
@@ -306,7 +345,7 @@ if __name__ == "__main__":
         # compute loss value for these predictions
         dice_loss = dice_loss_function(outputs_probs, labels_gpu_1hot)
         # log loss to the tensorboard
-        writer.add_scalar("TRAINING/DiceLossPerBatch", dice_loss, iteration+1)
+        writer.add_scalar("Tr/DiceLossBatch", dice_loss, iteration+1)
 
         # ===================================
         # additional regularization losses, according to the chosen method
@@ -346,7 +385,7 @@ if __name__ == "__main__":
             dice_loss_data_aug = dice_loss_function(outputs_probs1,
                                                     labels1_gpu_1hot)
 
-            writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
+            writer.add_scalar("Tr/DataAugLossBatch", dice_loss_data_aug, iteration+1)
 
             # =======================
             # total loss |  typically, data augmentation is implemented like this
@@ -409,7 +448,7 @@ if __name__ == "__main__":
 
             # loss on data aug samples (one of the two transformations)
             dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
-            writer.add_scalar("TRAINING/DataAugLossPerBatch", dice_loss_data_aug, iteration+1)
+            writer.add_scalar("Tr/DataAugLossBatch", dice_loss_data_aug, iteration+1)
 
             # consistency loss at each layer
             cons_loss_layer_l = []
@@ -459,16 +498,16 @@ if __name__ == "__main__":
                                                  vis_path + 'feats_inv_correctly_iter' + str(iteration) + '_l' + str(l+1) + '.png')
             
                 weight_layer_l.append((((l+1) / num_layers) ** args.alpha_layer))
-                writer.add_scalar("TRAINING/ConsistencyLossPerBatchLayer"+str(l+1), cons_loss_layer_l[l], iteration+1)
+                writer.add_scalar("Tr/ConsisLossBatchLayer"+str(l+1), cons_loss_layer_l[l], iteration+1)
 
             total_weight = sum(weight_layer_l)
             for l in range(num_layers):    
                 weight_layer_l[l] = args.lambda_consis * weight_layer_l[l] / total_weight
-                writer.add_scalar("TRAINING/ConsistencyLossWeightLayer"+str(l+1), weight_layer_l[l], iteration+1)
+                writer.add_scalar("Tr/ConsisLossWeightLayer"+str(l+1), weight_layer_l[l], iteration+1)
             
             # total consistency loss
             loss_consistency = sum(i[0] * i[1] for i in zip(weight_layer_l, cons_loss_layer_l))
-            writer.add_scalar("TRAINING/ConsistencyLossPerBatch", loss_consistency, iteration+1)
+            writer.add_scalar("Tr/ConsisLossBatch", loss_consistency, iteration+1)
             
             # total loss
             if args.method_invariance in [2, 3]:                
@@ -479,7 +518,7 @@ if __name__ == "__main__":
                 total_loss = (dice_loss + args.lambda_dataaug * dice_loss_data_aug + loss_consistency) / (1 + args.lambda_dataaug + sum(weight_layer_l))
         
         # total loss to tensorboard
-        writer.add_scalar("TRAINING/TotalLossPerBatch", total_loss, iteration+1)
+        writer.add_scalar("Tr/TotalLossBatch", total_loss, iteration+1)
 
         # ===================================
         # For the last batch after every some epochs, write images, labels and predictions to TB
@@ -515,21 +554,36 @@ if __name__ == "__main__":
         # x += -lr * x.grad
         # ===================================
         optimizer.step()
+        if args.lr_schedule == 1:
+            scheduler.step()
+            writer.add_scalar("Tr/lr", scheduler.get_last_lr()[0], iteration+1)
 
         # ===================================
         # evaluate on entire training and validation sets every once in a while
         # ===================================
-        if iteration > 0 and iteration % args.eval_frequency == 0:
-            dice_score_tr, dice_score_vl = evaluate(args,
-                                                    model,
-                                                    images_tr,
-                                                    labels_tr,
-                                                    images_vl,
-                                                    labels_vl,
-                                                    device,
-                                                    dice_loss_function)
-            writer.add_scalar("TRAINING/DiceScoreEntireTrainSet", dice_score_tr, iteration+1)
-            writer.add_scalar("TRAINING/DiceScoreEntireValSet", dice_score_vl, iteration+1)
+        if iteration == 100 or (iteration > 0 and iteration % args.eval_frequency_tr == 0):
+            logging.info("Evaluating entire training dataset...")
+            dice_score_tr = evaluate(args, model, images_tr, labels_tr, data_tr["depths"], device)
+            writer.add_scalar("Tr/DiceTrain", dice_score_tr, iteration+1)
+
+        if iteration == 100 or (iteration > 0 and iteration % args.eval_frequency_vl == 0):
+            dice_score_vl = evaluate(args, model, images_vl, labels_vl, data_vl["depths"], device)
+            writer.add_scalar("Tr/DiceVal", dice_score_vl, iteration+1)
+
+            dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
+            writer.add_scalar("Tr/DiceTest_RUNMC", dice_score_ts1, iteration+1)
+
+            dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
+            writer.add_scalar("Tr/DiceTest_BMC", dice_score_ts2, iteration+1)
+
+            dice_score_ts3 = evaluate(args, model, data_ts_3["images"], data_ts_3["labels"], data_ts_3["depths"], device)
+            writer.add_scalar("Tr/DiceTest_UCL", dice_score_ts3, iteration+1)
+
+            dice_score_ts4 = evaluate(args, model, data_ts_4["images"], data_ts_4["labels"], data_ts_4["depths"], device)
+            writer.add_scalar("Tr/DiceTest_HK", dice_score_ts4, iteration+1)
+
+            dice_score_ts5 = evaluate(args, model, data_ts_5["images"], data_ts_5["labels"], data_ts_5["depths"], device)
+            writer.add_scalar("Tr/DiceTest_BIDMC", dice_score_ts5, iteration+1)
 
             # ===================================
             # save best model so far, according to performance on validation set
