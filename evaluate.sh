@@ -19,7 +19,7 @@
 source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
 ## EXECUTION OF PYTHON CODE:
-python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
+python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate_multiple_models.py \
 --cv_fold_num $1 \
 --run_num $2 \
 --dataset $3 \

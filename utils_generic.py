@@ -14,7 +14,10 @@ def make_expdir(args):
         logdir = args.save_path + args.dataset + '/'
 
     # optimization related
-    logdir = logdir + args.optimizer + '_lr' + str(args.lr) + '_sch' + str(args.lr_schedule) + '_bs' + str(args.batch_size) + '/' 
+    if args.optimizer == 'sgd':
+        logdir = logdir + args.optimizer + '_lr' + str(args.lr) + '_sch' + str(args.lr_schedule) + '_bs' + str(args.batch_size) + '/' 
+    else:
+        logdir = logdir + 'lr' + str(args.lr) + '_sch' + str(args.lr_schedule) + '_bs' + str(args.batch_size) + '/' 
 
     # model related
     if args.model_has_heads == 1:

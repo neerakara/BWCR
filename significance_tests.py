@@ -68,47 +68,82 @@ def get_results(args):
     return results
 
 # ==========================================
+# Permutation test
+# ==========================================
+def compute_permutation_test(diff):
+
+    np.random.seed(1234)
+    orig_diff = np.mean(diff)
+
+    num_permutes = 10**4
+    permute_diffs = 1234 * np.ones((num_permutes))
+    for n in range(num_permutes):
+        tmp = np.random.choice([-1,1], size=diff.shape[0], replace=True)
+        permute_diffs[n] = np.mean(tmp * diff)
+
+    if orig_diff > 0.0: # actual result is that second method (proposed) is better than the first method (baseline)
+        num = len(np.where(permute_diffs > orig_diff)[0]) + 1 # checking how many times this trend holds in the permuted computations
+    elif orig_diff < 0.0: # actual result is that second method (proposed) is worse than the first method (baseline)
+        num = len(np.where(permute_diffs < orig_diff)[0]) + 1 # checking how many times this trend holds in the permuted computations
+    
+    p = num / (num_permutes + 1)
+
+    return orig_diff, p
+
+# ==========================================
+# if results from multiple runs are provided, take variance across runs into account
+# else simply compute the difference between runs
+# ==========================================
+def compute_diff(r1, r2): # [num_subjects, num_runs] / [num_subjects]
+
+    if len(r1.shape) == 1:
+        diff = r2 - r1
+    
+    elif len(r1.shape) == 2:
+
+        if r1.shape[-1] == 1:
+            diff = r2 - r1
+
+        else:
+            mu1 = np.mean(r1, axis=-1)
+            mu2 = np.mean(r2, axis=-1)
+            std1 = np.std(r1, axis=-1)
+            std2 = np.std(r2, axis=-1)
+            
+            # hack to deal with zero std devs
+            den = np.sqrt(std1 * std2)
+            den[den == 0.0] = 100.0
+            den_tmp = np.min(den)
+            den[den == 100.0] = den_tmp
+
+            # differences with high std devs across runs will have small weights
+            diff = (mu2 - mu1) / den
+
+    return diff
+
+# ==========================================
 # Carries out a paired permutation test
 # with differences between the two methods for each subject
 # scaled down by the geometric mean of the standard deviations of each method across training runs.
 # ==========================================
-def compute_significance(r1, r2, s1, s2, cv):
-    mu1 = np.mean(r1, axis=-1)
-    mu2 = np.mean(r2, axis=-1)
-    std1 = np.std(r1, axis=-1)
-    std2 = np.std(r2, axis=-1)
-    den = np.sqrt(std1 * std2)
-    # hack to deal with zero std devs
-    den[den == 0.0] = 100.0
-    den_tmp = np.min(den)
-    den[den == 100.0] = den_tmp
-    # differences with high std devs across runs will have small weights
-    diff = (mu2 - mu1) / den
-    # diff = mu2 - mu1
-    # logging.info(np.mean(diff))
-    # logging.info(np.std(diff))
-
-    np.random.seed(1234)
+def compute_significance(r1, # [num_subjects, num_runs] / [num_subjects]
+                         r2,
+                         s1,
+                         s2,
+                         cv,
+                         log=True):
     
-    orig_diff = np.mean(diff)
-    num_permutes = 10**4
-    permute_diffs = 1234 * np.ones((num_permutes))
-    for n in range(num_permutes):
-        tmp = np.random.choice([-1,1], size=mu1.shape[0], replace=True)
-        permute_diffs[n] = np.mean(tmp * diff)
-    
-    if orig_diff > 0.0:
-        num = len(np.where(permute_diffs > orig_diff)[0]) + 1
-    elif orig_diff < 0.0:
-        num = len(np.where(permute_diffs < orig_diff)[0]) + 1
-    p = num / (num_permutes + 1)
+    diff_vector = compute_diff(r1, r2)
 
-    logging.info('================= ' + str(cv))
-    logging.info('Mean dice ' + s1 + ': ' + str(np.round(np.mean(r1), 4)))
-    logging.info('Mean dice ' + s2 + ': ' + str(np.round(np.mean(r2), 4)))
-    logging.info('Mean difference: ' + str(np.round(orig_diff, 4)) + ', p-value: ' + str(np.round(p, 2)))
+    orig_diff, p = compute_permutation_test(diff_vector)
 
-    return 0
+    if log == True:
+        logging.info('================= ' + str(cv))
+        logging.info('Mean dice ' + s1 + ': ' + str(np.round(np.mean(r1), 4)))
+        logging.info('Mean dice ' + s2 + ': ' + str(np.round(np.mean(r2), 4)))
+        logging.info('Mean difference: ' + str(np.round(orig_diff, 4)) + ', p-value: ' + str(np.round(p, 2)))
+
+    return orig_diff, p
 
 # ==========================================
 # ==========================================
@@ -133,7 +168,7 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v5/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd

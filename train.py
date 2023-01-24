@@ -85,27 +85,20 @@ def evaluate(args,
     # set model to evaluate mode
     model.eval()
 
-    # initialize counters
-    dice_score = 0.0
-
-    num_subjects = depths.shape[0]
-
     # loop through the train / validation / test set and evaluate each batch
+    dice_scores = []
     with torch.no_grad():
-        
-        for sub in range(num_subjects):
+        for sub in range(depths.shape[0]):
             sub_start = int(np.sum(depths[:sub]))
             sub_end = int(np.sum(depths[:sub+1]))
-            dice_score = dice_score + compute_dice(images[:,:,sub_start:sub_end], 
-                                                   labels[:,:,sub_start:sub_end],
-                                                   model,
-                                                   args,
-                                                   device)
+            image = images[:,:,sub_start:sub_end]
+            label = labels[:,:,sub_start:sub_end]
+            dice_scores.append(compute_dice(image, label, model, args, device))
 
     # set model back to training mode
     model.train()
 
-    return dice_score / num_subjects
+    return np.array(dice_scores)
 
 # ==========================================
 # ==========================================
@@ -134,16 +127,16 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v5/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v6/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
-    parser.add_argument('--optimizer', default='sgd') # adam / sgd
-    parser.add_argument('--lr', default=0.001, type=float)
+    parser.add_argument('--optimizer', default='adam') # adam / sgd
+    parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--lr_schedule_step', default=15000, type=int)
     parser.add_argument('--lr_schedule_gamma', default=0.1, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=40001, type=int)
+    parser.add_argument('--max_iterations', default=100001, type=int)
     parser.add_argument('--log_frequency', default=500, type=int)
     parser.add_argument('--eval_frequency_tr', default=5000, type=int)
     parser.add_argument('--eval_frequency_vl', default=500, type=int)
@@ -155,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument('--consis_loss', default=1, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
     parser.add_argument('--lambda_consis', default=1.0, type=float) # weight for regularization loss (consistency overall)
     parser.add_argument('--alpha_layer', default=1.0, type=float) # growth of regularization loss weight with network depth
+    parser.add_argument('--load_model_num', default=0, type=int) # load_model_num = 0 --> train from scratch
     
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
@@ -298,9 +292,21 @@ if __name__ == "__main__":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
     if args.lr_schedule == 1:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_schedule_step, gamma=args.lr_schedule_gamma)
-    elif args.lr_schedule == 2:
-        lambda1 = lambda iteration: 1 - ((args.lr - 1e-8) * iteration / (args.max_iterations * args.lr))
+    elif args.lr_schedule == 2: # in case you need to run for more than max iterations, lr will remain constant at 1e-8
+        if args.load_model_num != 0:
+            lambda1 = lambda iteration: 1e-7 / args.lr
+        else:
+            lambda1 = lambda iteration: 1 - ((args.lr - 1e-7) * iteration / (args.max_iterations * args.lr))
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
+
+    # ===================================
+    # load pre-trained model
+    # ===================================
+    if args.load_model_num != 0:
+        modelpath = models_path + 'model_iter' + str(args.load_model_num) + '.pt'
+        logging.info('loading model weights from: ')
+        logging.info(modelpath)
+        model.load_state_dict(torch.load(modelpath)['state_dict'])
 
     # ===================================
     # set model to train mode
@@ -316,7 +322,7 @@ if __name__ == "__main__":
     # run training iterations
     # ===================================
     logging.info('Starting training iterations')
-    for iteration in range(args.max_iterations):
+    for iteration in range(args.load_model_num, args.max_iterations):
 
         if iteration % args.log_frequency == 0:
             logging.info('Training iteration ' + str(iteration + 1) + '...')
@@ -380,21 +386,16 @@ if __name__ == "__main__":
                                                                      device = device)
             # visualize training samples
             if iteration < 5:
-                utils_vis.save_images_and_labels(inputs1_gpu,
-                                                 labels1_gpu,
-                                                 vis_path + 't1_iter' + str(iteration) + '.png')
+                utils_vis.save_images_and_labels(inputs1_gpu, labels1_gpu, vis_path + 't1_iter' + str(iteration) + '.png')
 
             # convert labels to 1hot
-            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu,
-                                                            args.num_labels)
+            labels1_gpu_1hot = utils_data.make_label_onehot(labels1_gpu, args.num_labels)
 
             # compute predictions for the transformed batch
-            model_outputs1, outputs_probs1 = get_probs_and_outputs(model,
-                                                                   inputs1_gpu)
+            model_outputs1, outputs_probs1 = get_probs_and_outputs(model, inputs1_gpu)
 
             # loss on data aug samples
-            dice_loss_data_aug = dice_loss_function(outputs_probs1,
-                                                    labels1_gpu_1hot)
+            dice_loss_data_aug = dice_loss_function(outputs_probs1, labels1_gpu_1hot)
 
             writer.add_scalar("Tr/DataAugLossBatch", dice_loss_data_aug, iteration+1)
 
@@ -506,7 +507,7 @@ if __name__ == "__main__":
                                                   features1_inv_masked,
                                                   features2_inv_masked,
                                                   features1_inv_masked - features2_inv_masked],
-                                                 vis_path + 'feats_inv_correctly_iter' + str(iteration) + '_l' + str(l+1) + '.png')
+                                                  vis_path + 'feats_inv_correctly_iter' + str(iteration) + '_l' + str(l+1) + '.png')
             
                 weight_layer_l.append((((l+1) / num_layers) ** args.alpha_layer))
                 writer.add_scalar("Tr/ConsisLossBatchLayer"+str(l+1), cons_loss_layer_l[l], iteration+1)
@@ -575,40 +576,51 @@ if __name__ == "__main__":
         if iteration == 100 or (iteration > 0 and iteration % args.eval_frequency_tr == 0):
             logging.info("Evaluating entire training dataset...")
             dice_score_tr = evaluate(args, model, images_tr, labels_tr, data_tr["depths"], device)
-            writer.add_scalar("Tr/DiceTrain", dice_score_tr, iteration+1)
+            writer.add_scalar("Tr/DiceTrain", np.mean(dice_score_tr), iteration+1)
 
-        if iteration == 100 or (iteration > 0 and iteration % args.eval_frequency_vl == 0):
+        if (iteration % args.eval_frequency_vl == 0) or (iteration > (args.max_iterations - 500)):
             dice_score_vl = evaluate(args, model, images_vl, labels_vl, data_vl["depths"], device)
-            writer.add_scalar("Tr/DiceVal", dice_score_vl, iteration+1)
+            writer.add_scalar("Tr/DiceVal", np.mean(dice_score_vl), iteration+1)
 
             if args.dataset == 'prostate':
                 dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
-                writer.add_scalar("Tr/DiceTest_RUNMC", dice_score_ts1, iteration+1)
+                writer.add_scalar("Tr/DiceTest_RUNMC", np.mean(dice_score_ts1), iteration+1)
 
                 dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
-                writer.add_scalar("Tr/DiceTest_BMC", dice_score_ts2, iteration+1)
+                writer.add_scalar("Tr/DiceTest_BMC", np.mean(dice_score_ts2), iteration+1)
 
                 dice_score_ts3 = evaluate(args, model, data_ts_3["images"], data_ts_3["labels"], data_ts_3["depths"], device)
-                writer.add_scalar("Tr/DiceTest_UCL", dice_score_ts3, iteration+1)
+                writer.add_scalar("Tr/DiceTest_UCL", np.mean(dice_score_ts3), iteration+1)
 
                 dice_score_ts4 = evaluate(args, model, data_ts_4["images"], data_ts_4["labels"], data_ts_4["depths"], device)
-                writer.add_scalar("Tr/DiceTest_HK", dice_score_ts4, iteration+1)
+                writer.add_scalar("Tr/DiceTest_HK", np.mean(dice_score_ts4), iteration+1)
 
                 dice_score_ts5 = evaluate(args, model, data_ts_5["images"], data_ts_5["labels"], data_ts_5["depths"], device)
-                writer.add_scalar("Tr/DiceTest_BIDMC", dice_score_ts5, iteration+1)
+                writer.add_scalar("Tr/DiceTest_BIDMC", np.mean(dice_score_ts5), iteration+1)
+
+                dice_score_ts = np.stack((dice_score_ts1, dice_score_ts2, dice_score_ts3, dice_score_ts4, dice_score_ts5))
 
             elif args.dataset == 'ms':
                 dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
-                writer.add_scalar("Tr/DiceTest_InD", dice_score_ts1, iteration+1)
+                writer.add_scalar("Tr/DiceTest_InD", np.mean(dice_score_ts1), iteration+1)
 
                 dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
-                writer.add_scalar("Tr/DiceTest_OoD", dice_score_ts2, iteration+1)
+                writer.add_scalar("Tr/DiceTest_OoD", np.mean(dice_score_ts2), iteration+1)
+
+                dice_score_ts = np.concatenate((dice_score_ts1, dice_score_ts2))
+
+            logging.info(iteration)
+            dice_score_ts = np.reshape(dice_score_ts, [1,-1])
+            if iteration == args.load_model_num:
+                dice_scores_all_iters = dice_score_ts
+            else:
+                dice_scores_all_iters = np.concatenate((dice_scores_all_iters, dice_score_ts))
 
             # ===================================
             # save best model so far, according to performance on validation set
             # ===================================
-            if best_dice_score_vl <= dice_score_vl:
-                best_dice_score_vl = dice_score_vl
+            if (best_dice_score_vl <= np.mean(dice_score_vl)):
+                best_dice_score_vl = np.mean(dice_score_vl)
                 stuff_to_be_saved = {'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
                 model_name = 'best_val_iter' + str(iteration) + '.pt'
                 torch.save(stuff_to_be_saved, models_path + model_name)
@@ -617,7 +629,7 @@ if __name__ == "__main__":
         # ===================================
         # save models at some frequency irrespective of whether this is the best model or not
         # ===================================
-        if iteration % args.save_frequency == 0:
+        if (iteration % args.save_frequency == 0) or (iteration > (args.max_iterations - 500)):
             stuff_to_be_saved = {'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
             model_name = 'model_iter' + str(iteration) + '.pt'
             torch.save(stuff_to_be_saved, models_path + model_name)
@@ -626,3 +638,8 @@ if __name__ == "__main__":
         # flush all summaries to tensorboard
         # ===================================
         writer.flush()
+    
+    # ================
+    # save
+    # ================
+    np.save(models_path + 'variance_across_training_iters.npy', dice_scores_all_iters)

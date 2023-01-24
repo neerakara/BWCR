@@ -12,6 +12,19 @@ import skimage.segmentation
 
 # ==========================================================
 # ==========================================================
+def save_image(image, savepath):
+    
+    plt.figure(figsize=(5, 4))
+    k=0
+    plt.imshow(np.rot90(normalize_img_for_vis(image), k), cmap = 'gray')
+    plt.xticks(visible=False)
+    plt.yticks(visible=False)
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+# ==========================================================
+# ==========================================================
 def save_images_labels(images,
                        labels,
                        savepath):
@@ -414,3 +427,200 @@ def makesubplot(fig, nr, nc, c, img, title):
     plt.colorbar()
     plt.title(title)
     return 0
+
+def plot_scatter(r, savepath):
+    plt.figure(figsize=(10, 10))
+    plt.scatter(np.mean(r, 0), np.std(r, 0))
+    plt.xlabel('Mean Dice over 500 successive training iterations (step size 1e-8)')
+    plt.ylabel('Std deviation Dice over 500 successive training iterations (step size 1e-8)')
+    plt.ylim([-0.005, 0.07])
+    plt.title('Each dot is one test subject')
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+def plot_subjectwise(r, savepath):
+    plt.figure(figsize=(10, 10))
+    for s in range(r.shape[-1]):
+        plt.plot(r[:,s])
+    plt.title('Each line is one test subject. Mean ' + str(np.round(np.mean(r[:,:]), 2)))
+    plt.ylim([-0.05, 1.0])
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+def plot_methods(res, leg, savepath):
+    plt.figure(figsize=(30, 10))
+    for rid in range(len(res)):
+        plt.plot(res[rid], label=leg[rid])
+    # plt.ylim([-0.05, 1.0])
+    plt.legend()
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+def plot_scatter_simple(a,
+                        b,
+                        c,
+                        savepath,
+                        measure_type):
+    
+    numruns = len(a)
+    colors = ['blue', 'green', 'red']
+
+    plt.figure(figsize=(10, 10))
+    corr = 0.0
+    for r in range(numruns):
+        a1 = np.mean(a[r],-1) # mean across subjects
+        b1 = np.mean(b[r],-1) # mean across subjects
+        corr = corr + np.corrcoef(a1, b1)[0,1]
+        plt.scatter(a1, b1, color=colors[r])
+        # highlight iteration with highset val score
+        ind = np.argmax(a1)
+        plt.scatter(a1[ind], b1[ind],  c=colors[r],  marker='*', s=200)
+        # highlight last iteration
+        # plt.scatter(a1[-1], b1[-1],  c=colors[r],  marker='d', s=200)
+
+    plt.xlabel('Val InD', fontsize=22)
+    plt.ylabel('Test InD', fontsize=22)
+    plt.ylim([0.5, 1.0])
+    plt.title('Corr: ' + str(np.round(corr / numruns, 2)), fontsize=22)
+    plt.savefig(savepath + '/corr_ind_' + measure_type + '.png', bbox_inches='tight', dpi=50)
+    plt.close()
+
+    plt.figure(figsize=(10, 10))
+    corr = 0.0
+    for r in range(numruns):
+        a1 = np.mean(a[r],-1) # mean across subjects
+        c1 = np.mean(c[r],-1) # mean across subjects
+        corr = corr + np.corrcoef(a1, c1)[0,1]
+        plt.scatter(a1, c1, color=colors[r])
+        # highlight iteration with highset val score
+        ind = np.argmax(a1)
+        plt.scatter(a1[ind], c1[ind],  c=colors[r],  marker='*', s=200)
+        # highlight last iteration
+        # plt.scatter(a1[-1], c1[-1],  c=colors[r],  marker='d', s=200)
+
+    plt.xlabel('Val InD', fontsize=22)
+    plt.ylabel('Test OoD', fontsize=22)
+    plt.ylim([0.5, 0.8])
+    plt.title('Corr: ' + str(np.round(corr / numruns, 2)), fontsize=22)
+    plt.savefig(savepath + '/corr_ood_' + measure_type + '.png', bbox_inches='tight', dpi=50)
+    plt.close()
+
+    return 0
+
+# ============================================================================
+# ============================================================================
+def plot_ind_ood_corr_sub_dataset(a1, a2, savepath, dataset):
+
+    # ====================================
+    # plots of dice evolution over training iters
+    # ====================================
+    iters = np.linspace(10000, 100000, 10)
+    
+    plt.figure(figsize=(3, 8))
+    
+    # plot evolution of each val subject
+    for s in range(a1.shape[-1]):
+        plt.plot(iters, a1[:,s], 'r', alpha=0.25)
+    plt.plot(iters, np.mean(a1, -1), 'r', linewidth=2)
+
+    # plot evolution of each test subject
+    for s in range(a2.shape[-1]):
+        plt.plot(iters, a2[:,s], 'b', alpha=0.25)
+    plt.plot(iters, np.mean(a2, -1), 'b', linewidth=2)
+
+    plt.xlabel('Training iterations', fontsize=12)
+    plt.ylabel('Dice', fontsize=12)
+    plt.ylim([0.5, 0.95])
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.savefig(savepath + '_' + dataset + '_plot.png', bbox_inches='tight', dpi=100)
+    plt.close()
+
+    # ====================================
+    # scatter of val dice vs test dice
+    # ====================================
+    plt.figure(figsize=(3, 3))
+    a11 = np.mean(a1,-1)
+    a22 = np.mean(a2,-1)
+    plt.scatter(a11, a22)
+    corr = np.corrcoef(a11[1:], a22[1:])[0,1] # ignore values at 10k to see correlation once val becomes constant
+    plt.xlabel('InD Val', fontsize=12)
+    if dataset == 'BIDMC':
+        plt.ylim([0.55, 0.75])
+        plt.ylabel('OoD Test', fontsize=12)
+    elif dataset == 'RUNMC':
+        plt.ylim([0.85, 0.95])
+        plt.ylabel('InD Test', fontsize=12)
+    else:
+        plt.ylim([0.70, 0.85])
+        plt.ylabel('OoD Test', fontsize=12)
+    plt.xlim([0.89, 0.905])
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.title(np.round(corr, 2))
+    plt.savefig(savepath + '_' + dataset + '_scatter.png', bbox_inches='tight', dpi=100)
+    plt.close()
+
+# ============================================================================
+# a1 [num_runs, num_models, num_subjects]
+# ============================================================================
+def plot_ind_ood_corr_2_sub_dataset(a1, a2, filename):
+
+    iters = np.linspace(10000, 100000, 10)
+    
+    plt.figure(figsize=(3, 3))
+    
+    # for each run
+    corr = 0.0
+    for r in range(a1.shape[0]):
+        a11 = np.mean(a1[r,:,:],-1)
+        a22 = np.mean(a2[r,:,:],-1)
+        plt.scatter(a11, a22)
+        corr = corr + np.corrcoef(a11,a22)[0,1]
+
+    plt.xlabel('InD Val', fontsize=12)
+    
+    if 'BIDMC' in filename[-15:]:
+        plt.ylim([0.55, 0.75])
+        plt.ylabel('OoD Test', fontsize=12)
+    elif 'RUNMC' in filename[-15:]:
+        plt.ylim([0.85, 0.95])
+        plt.ylabel('InD Test', fontsize=12)
+    else:
+        plt.ylim([0.70, 0.85])
+        plt.ylabel('OoD Test', fontsize=12)
+    plt.xlim([0.89, 0.905])
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.title(np.round(corr/3, 2))
+    plt.savefig(filename, bbox_inches='tight', dpi=100)
+    plt.close()
+
+# ============================================================================
+# ============================================================================
+def plot_ind_ood_corr(ind_val,
+                      ind_tst,
+                      ood_tst,
+                      savepath):
+    
+    plot_ind_ood_corr_sub_dataset(ind_val, ind_tst, savepath, 'RUNMC')
+    plot_ind_ood_corr_sub_dataset(ind_val, ood_tst[:,:10], savepath, 'BMC')
+    plot_ind_ood_corr_sub_dataset(ind_val, ood_tst[:,10:20], savepath, 'UCL')
+    plot_ind_ood_corr_sub_dataset(ind_val, ood_tst[:,20:30], savepath, 'HK')
+    plot_ind_ood_corr_sub_dataset(ind_val, ood_tst[:,30:40], savepath, 'BIDMC')
+
+# ============================================================================
+# ============================================================================
+def plot_ind_ood_corr2(ind_val,
+                       ind_tst,
+                       ood_tst,
+                       savepath):
+
+    plot_ind_ood_corr_2_sub_dataset(ind_val, ind_tst, savepath + '_RUNMC.png')
+    plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,:10], savepath + '_BMC.png')
+    plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,10:20], savepath + '_UCL.png')
+    plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,20:30], savepath + '_HK.png')
+    plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,30:40], savepath + '_BIDMC.png')

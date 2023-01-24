@@ -98,7 +98,7 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v4/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v5/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
