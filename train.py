@@ -21,84 +21,25 @@ import utils_vis
 import utils_generic
 import data_loader
 
-# import psutil
-# import nvidia_smi
-# nvidia_smi.nvmlInit()
-# deviceCount = nvidia_smi.nvmlDeviceGetCount()
-
-# ======================================================
-# ======================================================
-def get_batch_subject(image,
-                      b,
-                      bs,
-                      device):
-
-    if (b+1) * bs < image.shape[-1]:
-        x_batch = image[:, :, b * bs : (b+1) * bs]
-    else:
-        x_batch = image[:, :, b * bs : ]
-
-    x_batch = np.expand_dims(np.swapaxes(np.swapaxes(x_batch, 2, 1), 1, 0), axis = 1)
-    
-    return utils_data.torch_and_send_to_device(x_batch, device)
-
-
-# ======================================================
-# ======================================================
-def compute_dice(image,
-                 label,
-                 model,
-                 args,
-                 device):
-
-    n_batches = np.ceil(image.shape[-1] / args.batch_size).astype(int)
-    
-    for b in range(n_batches):
-        x_batch = get_batch_subject(image,
-                                    b,
-                                    args.batch_size,
-                                    device)
-        
-        preds_gpu_this_batch = torch.nn.Softmax(dim=1)(model(x_batch)[-1])
-        
-        if b == 0:
-            preds_gpu = preds_gpu_this_batch
-        else:
-            preds_gpu = torch.cat((preds_gpu, preds_gpu_this_batch), dim = 0)
-
-    preds_soft = preds_gpu.detach().cpu().numpy()[:, 1, :, :]
-    preds_hard = (preds_soft > 0.5).astype(np.float32)
-    preds_hard = np.swapaxes(np.swapaxes(preds_hard, 0, 1), 1, 2)
-
-    return utils_generic.dice(im1 = preds_hard, im2 = label)
-
 # ======================================================
 # Function used to evaluate entire training / validation sets during training
 # ======================================================
 def evaluate(args,
              model,
-             images,
-             labels,
-             depths,
-             device):
+             device,
+             subdataset,
+             ttv):
 
     # set model to evaluate mode
     model.eval()
 
-    # loop through the train / validation / test set and evaluate each batch
-    dice_scores = []
-    with torch.no_grad():
-        for sub in range(depths.shape[0]):
-            sub_start = int(np.sum(depths[:sub]))
-            sub_end = int(np.sum(depths[:sub+1]))
-            image = images[:,:,sub_start:sub_end]
-            label = labels[:,:,sub_start:sub_end]
-            dice_scores.append(compute_dice(image, label, model, args, device))
+    # evaluate dice for all subjects in ttv split of this subdataset
+    dice_scores = utils_data.evaluate(args, subdataset, ttv, model, device)
 
     # set model back to training mode
     model.train()
 
-    return np.array(dice_scores)
+    return dice_scores
 
 # ==========================================
 # ==========================================
@@ -136,10 +77,10 @@ if __name__ == "__main__":
     parser.add_argument('--lr_schedule_step', default=15000, type=int)
     parser.add_argument('--lr_schedule_gamma', default=0.1, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=100001, type=int)
+    parser.add_argument('--max_iterations', default=50001, type=int)
     parser.add_argument('--log_frequency', default=500, type=int)
-    parser.add_argument('--eval_frequency_tr', default=5000, type=int)
-    parser.add_argument('--eval_frequency_vl', default=500, type=int)
+    parser.add_argument('--eval_frequency_tr', default=1000, type=int)
+    parser.add_argument('--eval_frequency_vl', default=100, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
     
     parser.add_argument('--model_has_heads', default=1, type=int)    
@@ -209,24 +150,10 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Reading training and validation data')
     data_tr = data_loader.load_data(args, args.sub_dataset, 'train')
-    data_vl = data_loader.load_data(args, args.sub_dataset, 'validation')
-    if args.dataset == 'prostate':
-        data_ts_1 = data_loader.load_data(args, 'RUNMC', 'test') # 1
-        data_ts_2 = data_loader.load_data(args, 'BMC', 'test') # 2
-        data_ts_3 = data_loader.load_data(args, 'UCL', 'test') # 3
-        data_ts_4 = data_loader.load_data(args, 'HK', 'test') # 4
-        data_ts_5 = data_loader.load_data(args, 'BIDMC', 'test') # 5
-    elif args.dataset == 'ms':
-        data_ts_1 = data_loader.load_data(args, 'InD', 'test') # 1
-        data_ts_2 = data_loader.load_data(args, 'OoD', 'test') # 2
 
     images_tr = data_tr["images"]
     labels_tr = data_tr["labels"]
     subject_names_tr = data_tr["subject_names"]
-
-    images_vl = data_vl["images"]
-    labels_vl = data_vl["labels"]
-    subject_names_vl = data_vl["subject_names"]
 
     if args.debugging == 1:
         logging.info('training images: ' + str(images_tr.shape))
@@ -240,12 +167,6 @@ if __name__ == "__main__":
         n_training_images = subject_names_tr.shape[0]
         for n in range(n_training_images):
             logging.info(subject_names_tr[n])
-        logging.info('validation images: ' + str(images_vl.shape))
-        logging.info('validation labels: ' + str(labels_vl.shape)) # not one hot ... has one channel only
-        logging.info('validation subject names')
-        n_validation_images = subject_names_vl.shape[0]
-        for n in range(n_validation_images):
-            logging.info(subject_names_vl[n])
 
     # ===================================
     # define model
@@ -260,13 +181,14 @@ if __name__ == "__main__":
                               num_labels = args.num_labels,
                               squeeze = False)
     model = model.to(device)
+
+    # ===================================
+    # Create a dictionary to store the EMA weights
+    # ===================================
+    # ema_weights = {name: torch.zeros_like(param) for name, param in model.named_parameters()}
+    # Set the decay rate
+    # decay = 0.99
     
-    # net = torch.nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
-
-    # RuntimeError: CUDA error: out of memory
-    # CUDA kernel errors might be asynchronously reported at some other API call,so the stacktrace below might be incorrect.
-    # For debugging consider passing CUDA_LAUNCH_BLOCKING=1.
-
     # ===================================
     # define loss
     # https://docs.monai.io/en/stable/losses.html
@@ -317,6 +239,7 @@ if __name__ == "__main__":
     # keep track of best validation performance 
     # ===================================
     best_dice_score_vl = 0.0
+    # best_dice_score_vl_ema = 0.0
 
     # ===================================
     # run training iterations
@@ -326,20 +249,6 @@ if __name__ == "__main__":
 
         if iteration % args.log_frequency == 0:
             logging.info('Training iteration ' + str(iteration + 1) + '...')
-
-        # # tracking cpu and gpu utilization
-        # info0 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(0))
-        # info1 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(1))
-        # info2 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(2))
-        # info3 = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(3))
-        # usage0 = 100*info0.free/info0.total
-        # usage1 = 100*info1.free/info1.total
-        # usage2 = 100*info2.free/info2.total
-        # usage3 = 100*info3.free/info3.total
-        # writer.add_scalar("Utilization/GPU0", usage0, iteration+1)
-        # writer.add_scalar("Utilization/GPU1", usage1, iteration+1)
-        # writer.add_scalar("Utilization/GPU2", usage2, iteration+1)
-        # writer.add_scalar("Utilization/GPU3", usage3, iteration+1)
 
         # ===================================
         # https://discuss.pytorch.org/t/what-does-the-backward-function-do/9944
@@ -570,51 +479,46 @@ if __name__ == "__main__":
             scheduler.step()
             writer.add_scalar("Tr/lr", scheduler.get_last_lr()[0], iteration+1)
 
+        # # ===================================
+        # # Update the EMA weights
+        # # ===================================
+        # with torch.no_grad():
+        #     for name, param in model.named_parameters():
+        #         if 'bn' in name:
+        #             # Update the running mean and variance of the batch normalization layers
+        #             param.update_parameters(decay)
+        #         else:
+        #             ema_weights[name] = ema_weights[name] * decay + param * (1 - decay)
+
         # ===================================
-        # evaluate on entire training and validation sets every once in a while
+        # evaluate on entire validation and test sets every once in a while
         # ===================================
-        if iteration == 100 or (iteration > 0 and iteration % args.eval_frequency_tr == 0):
-            logging.info("Evaluating entire training dataset...")
-            dice_score_tr = evaluate(args, model, images_tr, labels_tr, data_tr["depths"], device)
-            writer.add_scalar("Tr/DiceTrain", np.mean(dice_score_tr), iteration+1)
+        if (iteration % args.eval_frequency_vl == 0) or (iteration > (args.max_iterations - 100)):
+            dice_score_vl = evaluate(args, model, device, args.sub_dataset, 'validation')
+            writer.add_scalar("Tr/Dice_Val", np.mean(dice_score_vl), iteration+1)
 
-        if (iteration % args.eval_frequency_vl == 0) or (iteration > (args.max_iterations - 500)):
-            dice_score_vl = evaluate(args, model, images_vl, labels_vl, data_vl["depths"], device)
-            writer.add_scalar("Tr/DiceVal", np.mean(dice_score_vl), iteration+1)
+            # dice_score_vl_ema = evaluate(args, ema.shadow, device, args.sub_dataset, 'validation')
+            # writer.add_scalar("Tr/Dice_Val_EMA", np.mean(dice_score_vl_ema), iteration+1)
 
-            if args.dataset == 'prostate':
-                dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
-                writer.add_scalar("Tr/DiceTest_RUNMC", np.mean(dice_score_ts1), iteration+1)
+            dice_score_ts = evaluate(args, model, device, args.sub_dataset, 'test')
+            writer.add_scalar("Tr/Dice_Test", np.mean(dice_score_ts), iteration+1)
 
-                dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
-                writer.add_scalar("Tr/DiceTest_BMC", np.mean(dice_score_ts2), iteration+1)
+            # dice_score_ts_ema = evaluate(args, ema.shadow, device, args.sub_dataset, 'test')
+            # writer.add_scalar("Tr/Dice_Test_EMA", np.mean(dice_score_ts_ema), iteration+1)
 
-                dice_score_ts3 = evaluate(args, model, data_ts_3["images"], data_ts_3["labels"], data_ts_3["depths"], device)
-                writer.add_scalar("Tr/DiceTest_UCL", np.mean(dice_score_ts3), iteration+1)
+            # writer.add_scalar("Tr/Dice_UCL", np.mean(evaluate(args, model, device, 'UCL', 'test')), iteration+1)
+            # writer.add_scalar("Tr/Dice_UCL_EMA", np.mean(evaluate(args, ema.shadow, device, 'UCL', 'test')), iteration+1)
+            # writer.add_scalar("Tr/Dice_HK", np.mean(evaluate(args, model, device, 'HK', 'test')), iteration+1)
+            # writer.add_scalar("Tr/Dice_HK_EMA", np.mean(evaluate(args, ema.shadow, device, 'HK', 'test')), iteration+1)
+            # writer.add_scalar("Tr/Dice_BIDMC", np.mean(evaluate(args, model, device, 'BIDMC', 'test')), iteration+1)
+            # writer.add_scalar("Tr/Dice_BIDMC_EMA", np.mean(evaluate(args, ema.shadow, device, 'BIDMC', 'test')), iteration+1)
 
-                dice_score_ts4 = evaluate(args, model, data_ts_4["images"], data_ts_4["labels"], data_ts_4["depths"], device)
-                writer.add_scalar("Tr/DiceTest_HK", np.mean(dice_score_ts4), iteration+1)
-
-                dice_score_ts5 = evaluate(args, model, data_ts_5["images"], data_ts_5["labels"], data_ts_5["depths"], device)
-                writer.add_scalar("Tr/DiceTest_BIDMC", np.mean(dice_score_ts5), iteration+1)
-
-                dice_score_ts = np.stack((dice_score_ts1, dice_score_ts2, dice_score_ts3, dice_score_ts4, dice_score_ts5))
-
-            elif args.dataset == 'ms':
-                dice_score_ts1 = evaluate(args, model, data_ts_1["images"], data_ts_1["labels"], data_ts_1["depths"], device)
-                writer.add_scalar("Tr/DiceTest_InD", np.mean(dice_score_ts1), iteration+1)
-
-                dice_score_ts2 = evaluate(args, model, data_ts_2["images"], data_ts_2["labels"], data_ts_2["depths"], device)
-                writer.add_scalar("Tr/DiceTest_OoD", np.mean(dice_score_ts2), iteration+1)
-
-                dice_score_ts = np.concatenate((dice_score_ts1, dice_score_ts2))
-
-            logging.info(iteration)
-            dice_score_ts = np.reshape(dice_score_ts, [1,-1])
-            if iteration == args.load_model_num:
-                dice_scores_all_iters = dice_score_ts
-            else:
-                dice_scores_all_iters = np.concatenate((dice_scores_all_iters, dice_score_ts))
+            # logging.info(iteration)
+            # dice_score_ts = np.reshape(dice_score_ts, [1,-1])
+            # if iteration == args.load_model_num:
+            #     dice_scores_all_iters = dice_score_ts
+            # else:
+            #     dice_scores_all_iters = np.concatenate((dice_scores_all_iters, dice_score_ts))
 
             # ===================================
             # save best model so far, according to performance on validation set
@@ -626,10 +530,26 @@ if __name__ == "__main__":
                 torch.save(stuff_to_be_saved, models_path + model_name)
                 logging.info('Found new best dice on val set: ' + str(best_dice_score_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
 
+            # ===================================
+            # save best model so far, according to performance on validation set (evaluated on ema weights)
+            # ===================================
+            # if (best_dice_score_vl_ema <= np.mean(dice_score_vl_ema)):
+            #     best_dice_score_vl_ema = np.mean(dice_score_vl_ema)
+            #     stuff_to_be_saved = {'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
+            #     model_name = 'best_val_ema_iter' + str(iteration) + '.pt'
+            #     torch.save(stuff_to_be_saved, models_path + model_name)
+            #     logging.info('Found new best dice on val set: ' + str(best_dice_score_vl_ema) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
+
         # ===================================
         # save models at some frequency irrespective of whether this is the best model or not
         # ===================================
-        if (iteration % args.save_frequency == 0) or (iteration > (args.max_iterations - 500)):
+        if iteration % args.eval_frequency_tr == 0:
+            
+            logging.info("Evaluating entire training dataset...")
+            dice_score_tr = evaluate(args, model, device, args.sub_dataset, 'train')
+            writer.add_scalar("Tr/DiceTrain", np.mean(dice_score_tr), iteration+1)
+
+            logging.info("saving current model")
             stuff_to_be_saved = {'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()}
             model_name = 'model_iter' + str(iteration) + '.pt'
             torch.save(stuff_to_be_saved, models_path + model_name)
@@ -642,4 +562,4 @@ if __name__ == "__main__":
     # ================
     # save
     # ================
-    np.save(models_path + 'variance_across_training_iters.npy', dice_scores_all_iters)
+    # np.save(models_path + 'variance_across_training_iters.npy', dice_scores_all_iters)

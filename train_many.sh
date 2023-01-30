@@ -30,15 +30,15 @@ heads=0
 #     echo "I do not recognize this method."
 # fi
 
-for runnum in 2 3
+for runnum in 1
 do
-    for cvfold in 1
+    for cvfold in 30
     do
-        for method in 200
+        for method in 100
         do
             for alpha in 100.0
             do
-                sbatch /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $heads $method $lamda $lamcons $consloss $alpha
+                sbatch --no-requeue /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $heads $method $lamda $lamcons $consloss $alpha
             done
         done
     done

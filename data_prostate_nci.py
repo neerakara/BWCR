@@ -37,6 +37,16 @@ def get_train_test_val_split_ids(cv_fold_num):
         train_test_val_split_ids['validation'] = np.arange(10, 15, 1).tolist()
         train_test_val_split_ids['train'] = np.arange(15, 30, 1).tolist()
 
+    elif cv_fold_num == 3: # 'smaller training dataset'
+        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
+        train_test_val_split_ids['validation'] = np.arange(10, 12, 1).tolist()
+        train_test_val_split_ids['train'] = np.arange(15, 17, 1).tolist()
+
+    elif cv_fold_num == 30: # 'smaller training dataset' | different data points
+        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
+        train_test_val_split_ids['validation'] = np.arange(12, 14, 1).tolist()
+        train_test_val_split_ids['train'] = np.arange(17, 19, 1).tolist()
+
     return train_test_val_split_ids
 
 # ===============================================================

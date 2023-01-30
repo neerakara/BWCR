@@ -17,75 +17,6 @@ import utils_generic
 import data_loader
 import csv
 
-# ======================================================
-# ======================================================
-def get_batch_subject(image, b, bs, device):
-
-    if (b+1) * bs < image.shape[-1]:
-        x_batch = image[:, :, b * bs : (b+1) * bs]
-    else:
-        x_batch = image[:, :, b * bs : ]
-    x_batch = np.expand_dims(np.swapaxes(np.swapaxes(x_batch, 2, 1), 1, 0), axis = 1)
-    return utils_data.torch_and_send_to_device(x_batch, device)
-
-# ======================================================
-# ======================================================
-def predict_segmentation(image, model, device, px, py, nx, ny):
-
-    bsize = 8
-    n_batches = np.ceil(image.shape[-1] / bsize).astype(int)
-    
-    for b in range(n_batches):
-        x_batch = get_batch_subject(image, b, bsize, device)
-        preds_gpu_this_batch = torch.nn.Softmax(dim=1)(model(x_batch)[-1])
-        if b == 0:
-            preds_gpu = preds_gpu_this_batch
-        else:
-            preds_gpu = torch.cat((preds_gpu, preds_gpu_this_batch), dim = 0)
-
-    preds_soft = preds_gpu.detach().cpu().numpy()[:, 1, :, :]
-    preds_hard = (preds_soft > 0.5).astype(np.float32)
-    preds_hard = utils_data.rescale_and_crop(preds_hard, scale = (0.625 / px, 0.625 / py), size = (nx, ny), order = 0).astype(np.uint8)
-    preds_hard = np.swapaxes(np.swapaxes(preds_hard, 0, 1), 1, 2)
-
-    return preds_hard
-
-# ======================================================
-# ======================================================
-def get_gt_label(subdataset, subname):
-    label = data_loader.load_without_preproc(subdataset, subname)[1]
-    label[label!=0] = 1
-    if subdataset in ['UCL', 'HK', 'BIDMC']:
-        label = np.swapaxes(np.swapaxes(label, 0, 1), 1, 2)
-    return label
-
-# ======================================================
-# Function used to evaluate entire training / validation sets during training
-# ======================================================
-def evaluate(args, subdataset, ttv, model, device):
-
-    data = data_loader.load_data(args, subdataset, ttv)
-    
-    dice_scores = []
-    
-    with torch.no_grad():
-    
-        for sub in range(data['depths'].shape[0]):
-    
-            # get image of one subject
-            image = data['images'][:,:,int(np.sum(data['depths'][:sub])):int(np.sum(data['depths'][:sub+1]))]
-
-            # predict segmentation
-            pred = predict_segmentation(image, model, device, data["px"][sub], data["py"][sub], data["nx"][sub], data["ny"][sub])
-
-            # read original label (without preprocessing)
-            label = get_gt_label(subdataset, data["subject_names"][sub].decode('utf-8'))
-            
-            # compute dice
-            dice_scores.append(utils_generic.dice(im1 = pred, im2 = label))
-
-    return np.array(dice_scores)
-
 # ==========================================
 # ==========================================
 if __name__ == "__main__":
@@ -185,12 +116,12 @@ if __name__ == "__main__":
         # ===================================
         # evaluate each dataset one by one
         # ===================================
-        ind_val.append(evaluate(args, 'RUNMC', 'validation', model, device))
-        ind_test.append(evaluate(args, 'RUNMC', 'test', model, device))
-        ood_test_tmp = evaluate(args, 'BMC', 'test', model, device)
-        ood_test_tmp = np.concatenate((ood_test_tmp, evaluate(args, 'UCL', 'test', model, device)))
-        ood_test_tmp = np.concatenate((ood_test_tmp, evaluate(args, 'HK', 'test', model, device)))
-        ood_test_tmp = np.concatenate((ood_test_tmp, evaluate(args, 'BIDMC', 'test', model, device)))
+        ind_val.append(utils_data.evaluate(args, 'RUNMC', 'validation', model, device))
+        ind_test.append(utils_data.evaluate(args, 'RUNMC', 'test', model, device))
+        ood_test_tmp = utils_data.evaluate(args, 'BMC', 'test', model, device)
+        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args, 'UCL', 'test', model, device)))
+        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args, 'HK', 'test', model, device)))
+        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args, 'BIDMC', 'test', model, device)))
         ood_test.append(ood_test_tmp)
 
     np.save(results_path + 'ind_val_' + measure_var + '.npy', np.array(ind_val))
