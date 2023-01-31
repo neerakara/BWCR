@@ -3,6 +3,29 @@ import numpy as np
 
 # ======================================================
 # ======================================================
+def make_expdir_2(args):
+
+    # data related
+    if args.dataset == 'placenta':
+        logdir = args.save_path + args.dataset + '/cv' + str(args.cv_fold_num) + '/' 
+    elif args.dataset == 'prostate':
+        logdir = args.save_path + args.dataset + '/' + args.sub_dataset + '/cv' + str(args.cv_fold_num) + '/'
+    elif args.dataset == 'ms':
+        logdir = args.save_path + args.dataset + '/'
+
+    # optimization related
+    logdir = logdir + 'lr' + str(args.lr) + '_bs' + str(args.batch_size) + '/' 
+
+    # invariance method
+    logdir = logdir + 'l0_' + str(args.l0) + '_l1_' + str(args.l1) + '_l2_' + str(args.l2) + '_t_' + str(args.temp) + '/'
+
+    # run number
+    logdir = logdir + 'run' + str(args.run_number) + '/'
+    
+    return logdir
+
+# ======================================================
+# ======================================================
 def make_expdir(args):
 
     # data related

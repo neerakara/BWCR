@@ -1,45 +1,16 @@
 #!/bin/bash
 anatomy='prostate'
 dataset='RUNMC'
-consloss=2
 daprob=0.5
-lamda=1.0
-lamcons=0.01
-heads=0
-# if [[ "$method" -eq 0 ]]; then
-#     heads=0
-# elif [[ "$method" -eq 1 ]]; then
-#     heads=0
-# elif [[ "$method" -eq 10 ]]; then
-#     heads=0
-# elif [[ "$method" -eq 100 ]]; then
-#     heads=0
-# elif [[ "$method" -eq 2 ]]; then
-#     heads=1
-# elif [[ "$method" -eq 3 ]]; then
-#     heads=1
-# elif [[ "$method" -eq 20 ]]; then
-#     heads=1
-# elif [[ "$method" -eq 30 ]]; then
-#     heads=1
-# elif [[ "$method" -eq 200 ]]; then
-#     heads=1
-# elif [[ "$method" -eq 300 ]]; then
-#     heads=1
-# else
-#     echo "I do not recognize this method."
-# fi
+l0=0.0
+l1=1.0
+l2=1.0
+tem=2.0
 
 for runnum in 1
 do
-    for cvfold in 30
+    for cvfold in 3
     do
-        for method in 100
-        do
-            for alpha in 100.0
-            do
-                sbatch --no-requeue /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $heads $method $lamda $lamcons $consloss $alpha
-            done
-        done
+        sbatch --no-requeue /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $l0 $l1 $l2 $tem
     done
 done

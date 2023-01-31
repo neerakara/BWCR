@@ -368,14 +368,12 @@ def noise(image, params, s = -1.0):
 # ============================================================
 # invert geometric transformations for each prediction in the batch 
 # ============================================================
-def invert_geometric_transforms(features, t):
+def invert_geometric_transforms(features, t, interp = 'bilinear'):
 
-    return TF.affine(features,
-                     angle=-t[0],
-                     translate=[-t[1], -t[2]],
-                     scale=1 / t[3],
-                     shear=[-t[4], -t[5]],
-                     interpolation = transforms.InterpolationMode.BILINEAR)
+    if interp == 'bilinear':
+        return TF.affine(features, angle=-t[0], translate=[-t[1], -t[2]], scale=1 / t[3], shear=[-t[4], -t[5]], interpolation = transforms.InterpolationMode.BILINEAR)
+    elif interp == 'nearest':
+        return TF.affine(features, angle=-t[0], translate=[-t[1], -t[2]], scale=1 / t[3], shear=[-t[4], -t[5]], interpolation = transforms.InterpolationMode.NEAREST)
 
 # ==================================================
 # Applies transformation to images and labels
@@ -439,17 +437,6 @@ def apply_geometric_transforms_mask(mask, t):
                      scale=t[3],
                      shear=[t[4], t[5]],
                      interpolation = tt.InterpolationMode.NEAREST)
-
-# ==================================================
-# ==================================================
-def invert_geometric_transforms_mask(mask, t):
-
-    return TF.affine(mask,
-                     angle=-t[0],
-                     translate=[-t[1], -t[2]],
-                     scale=1 / t[3],
-                     shear=[-t[4], -t[5]],
-                     interpolation = transforms.InterpolationMode.BILINEAR)
 
 # ==================================================
 # ==================================================
