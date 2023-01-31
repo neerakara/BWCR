@@ -7,9 +7,9 @@ def make_expdir(args):
 
     # data related
     if args.dataset == 'placenta':
-        logdir = args.save_path + args.dataset + '_cv' + str(args.cv_fold_num) + '/' 
+        logdir = args.save_path + args.dataset + '/cv' + str(args.cv_fold_num) + '/' 
     elif args.dataset == 'prostate':
-        logdir = args.save_path + args.dataset + '_' + args.sub_dataset + '_cv' + str(args.cv_fold_num) + '/'
+        logdir = args.save_path + args.dataset + '/' + args.sub_dataset + '/cv' + str(args.cv_fold_num) + '/'
     elif args.dataset == 'ms':
         logdir = args.save_path + args.dataset + '/'
 

@@ -25,6 +25,53 @@ def save_image(image, savepath):
 
 # ==========================================================
 # ==========================================================
+def save_images_labels_all(images,
+                           labels,
+                           savepath):
+    
+    bs = images.shape[0]
+    plt.figure(figsize=(4*2, 4*bs))
+    k=0
+    s=50
+    e=200
+    # show 4 examples per batch
+    for batch_index in range(bs):
+        plt.subplot(bs, 2, 2*batch_index + 1, xticks=[], yticks=[])
+        plt.imshow(np.rot90(normalize_img_for_vis(images[batch_index,0,s:e,s:e]),k), cmap = 'gray')
+        plt.subplot(bs, 2, 2*batch_index + 2, xticks=[], yticks=[])
+        plt.imshow(np.rot90(normalize_img_for_vis(labels[batch_index,0,s:e,s:e]),k), cmap = 'gray')
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
+
+# ==========================================================
+# ==========================================================
+def save_all(all,
+             savepath):
+    
+    num_things = len(all)
+    bs = all[0].shape[0]
+    
+    plt.figure(figsize=(4*num_things, 4*bs))
+    k=0
+    s=50
+    e=200
+    
+    for batch_index in range(bs):
+
+        for t in range(num_things):
+            
+            plt.subplot(bs, num_things, num_things*batch_index + t + 1, xticks=[], yticks=[])
+            plt.imshow(np.rot90(all[t].detach().cpu().numpy()[batch_index,s:e,s:e], k), cmap = 'gray')
+            plt.colorbar()
+    
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    
+    return 0
+
+# ==========================================================
+# ==========================================================
 def save_images_labels(images,
                        labels,
                        savepath):
