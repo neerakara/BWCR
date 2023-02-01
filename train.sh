@@ -8,7 +8,7 @@
 ## SLURM Variables:
 #SBATCH  --output=/data/scratch/nkarani/logs/%j.out
 #SBATCH  --partition=titan,2080ti,gpu
-#SBATCH  --exclude=anise,curcum,sumac,fennel,urfa-biber,rosemary,mace
+#SBATCH  --exclude=anise,curcum,sumac,fennel,urfa-biber,rosemary,mace,malt
 #SBATCH  --gres=gpu:1
 #SBATCH  --cpus-per-task=8
 #SBATCH  --mem=12G

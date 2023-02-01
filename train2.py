@@ -3,6 +3,7 @@
 # ===================================
 # book-keeping stuff
 import os
+import copy
 import argparse
 import logging
 # cnn related stuff
@@ -116,10 +117,8 @@ if __name__ == "__main__":
     parser.add_argument('--optimizer', default='adam') # adam / sgd
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=20001, type=int)
-    parser.add_argument('--log_frequency', default=50, type=int)
-    parser.add_argument('--eval_frequency_tr', default=1000, type=int)
-    parser.add_argument('--eval_frequency_vl', default=100, type=int)
+    parser.add_argument('--max_iterations', default=30001, type=int)
+    parser.add_argument('--eval_frequency', default=100, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
 
     # no tricks: (100), data aug (010), data aug + consistency (011 / 012)
@@ -173,6 +172,14 @@ if __name__ == "__main__":
     model = model.to(device)
 
     # ===================================
+    # ema model
+    # ===================================
+    model_ema = copy.deepcopy(model)
+    for param, ema_param in zip(model.parameters(), model_ema.parameters()):
+        ema_param.data.copy_(param.data)
+    alpha_ema = 0.99
+
+    # ===================================
     # define loss
     # ===================================
     dice_loss_function = DiceLoss(include_background=False)
@@ -191,6 +198,12 @@ if __name__ == "__main__":
     # set model to train mode
     # ===================================
     model.train()
+
+    # ===================================
+    # keep track of best validation performance 
+    # ===================================
+    best_dice_score_vl = 0.0
+    best_dice_score_ema_vl = 0.0
 
     # ===================================
     # load images and labels
@@ -282,11 +295,11 @@ if __name__ == "__main__":
         # =======================
         # add losses to tensorboard
         # =======================
-        writer.add_scalar("Tr/sup_loss0", sup_loss0, iteration+1)
-        writer.add_scalar("Tr/sup_loss1", sup_loss1, iteration+1)
-        writer.add_scalar("Tr/sup_loss2", sup_loss2, iteration+1)
-        writer.add_scalar("Tr/con_loss1", con_loss1, iteration+1)
-        writer.add_scalar("Tr/con_loss2", con_loss2, iteration+1)
+        writer.add_scalar("Loss/sup0", sup_loss0, iteration+1)
+        writer.add_scalar("Loss/sup1", sup_loss1, iteration+1)
+        writer.add_scalar("Loss/sup2", sup_loss2, iteration+1)
+        writer.add_scalar("Loss/cons1", con_loss1, iteration+1)
+        writer.add_scalar("Loss/cons2", con_loss2, iteration+1)
 
         # =======================
         # set desired combinations of losses and compute gradients
@@ -301,26 +314,59 @@ if __name__ == "__main__":
         scheduler.step()
         writer.add_scalar("Tr/lr", scheduler.get_last_lr()[0], iteration+1)
 
-        # ==========
-        # log losses
-        # ==========
-        # logging.info('iter ' + str(iteration + 1) + 
-        #                 ', sup = ' + str(np.round(sup_loss0.detach().cpu().numpy(), 2)) +
-        #                 ', dataaug (1) = ' + str(np.round(sup_loss1.detach().cpu().numpy(), 2)) +
-        #                 ', dataaug (2) = ' + str(np.round(sup_loss2.detach().cpu().numpy(), 2)) +
-        #                 ', consistency (1) = ' + str(np.round(con_loss1.detach().cpu().numpy(), 2)) + 
-        #                 ', consistency (2) = ' + str(np.round(con_loss2.detach().cpu().numpy(), 2)))
+        # =======================
+        # update ema model weights
+        # =======================
+        for param, ema_param in zip(model.parameters(), model_ema.parameters()):
+            ema_param.data.mul_(alpha_ema).add_(1 - alpha_ema, param.data)
+        for bn, bn_ema in zip(model.modules(), model_ema.modules()):
+            if isinstance(bn, torch.nn.BatchNorm2d):
+                bn_ema.running_mean.mul_(alpha_ema).add_(1 - alpha_ema, bn.running_mean)
+                bn_ema.running_var.mul_(alpha_ema).add_(1 - alpha_ema, bn.running_var)
         
         # ===================================
         # evaluate on entire validation and test sets every once in a while
         # ===================================
-        if (iteration % args.eval_frequency_vl == 0):
+        if (iteration % args.eval_frequency == 0):
+
             dice_score_ts = evaluate(args, model, device, args.sub_dataset, 'test')
             dice_score_tr = evaluate(args, model, device, args.sub_dataset, 'train')
             dice_score_vl = evaluate(args, model, device, args.sub_dataset, 'validation')
-            writer.add_scalar("Tr/DiceTrain", np.mean(dice_score_tr), iteration+1)
-            writer.add_scalar("Tr/Dice_Test", np.mean(dice_score_ts), iteration+1)
-            writer.add_scalar("Tr/Dice_Val", np.mean(dice_score_vl), iteration+1)
+            writer.add_scalar("Dice/Test", np.mean(dice_score_ts), iteration+1)
+            writer.add_scalar("Dice/Train", np.mean(dice_score_tr), iteration+1)
+            writer.add_scalar("Dice/Val", np.mean(dice_score_vl), iteration+1)
+
+            dice_score_ema_ts = evaluate(args, model_ema, device, args.sub_dataset, 'test')
+            dice_score_ema_tr = evaluate(args, model_ema, device, args.sub_dataset, 'train')
+            dice_score_ema_vl = evaluate(args, model_ema, device, args.sub_dataset, 'validation')
+            writer.add_scalar("Dice_EMA/Test", np.mean(dice_score_ema_ts), iteration+1)
+            writer.add_scalar("Dice_EMA/Train", np.mean(dice_score_ema_tr), iteration+1)
+            writer.add_scalar("Dice_EMA/Val", np.mean(dice_score_ema_vl), iteration+1)
+
+            # ===================================
+            # save best model so far, according to performance on validation set
+            # ===================================
+            if (best_dice_score_vl <= np.mean(dice_score_vl)):
+                best_dice_score_vl = np.mean(dice_score_vl)
+                torch.save({'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()},
+                           models_path + 'best_val_iter' + str(iteration) + '.pt')
+                logging.info('Found new best dice on val set: ' + str(best_dice_score_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
+
+            # ===================================
+            # save best ema model so far, according to performance on validation set
+            # ===================================
+            if (best_dice_score_ema_vl <= np.mean(dice_score_ema_vl)):
+                best_dice_score_ema_vl = np.mean(dice_score_ema_vl)
+                torch.save({'state_dict': model_ema.state_dict(), 'optimizer': optimizer.state_dict()},
+                           models_path + 'best_ema_val_iter' + str(iteration) + '.pt')
+                logging.info('Found new best dice on ema val set: ' + str(best_dice_score_ema_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
+
+        # ===================================
+        # save models at some frequency irrespective of whether this is the best model or not
+        # ===================================
+        if (iteration > 0) and (iteration % args.save_frequency) == 0:
+            torch.save({'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()},
+                       models_path + 'model_iter' + str(iteration) + '.pt')
 
         # tensorboard
         writer.flush()
@@ -339,4 +385,3 @@ if __name__ == "__main__":
                         sup_loss1_p,
                         con_loss1_p], # total loss including supervised and smoothened loss
                         vis_path + 'iter' + str(iteration) + '.png')
-

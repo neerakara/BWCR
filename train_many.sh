@@ -1,17 +1,17 @@
 #!/bin/bash
 anatomy='prostate'
-dataset='RUNMC'
+dataset='BMC'
 daprob=0.5
-l0=0.0
-l1=1.0
+l0=1.0
+l1=0.0
 l1loss='ce'
-l2=1.0
-l2loss='ce'
-runnum=2
+tem=1.0
+l2loss='l2'
+runnum=1
 
-for tem in 100.0
+for l2 in 0.0
 do
-    for cvfold in 3
+    for cvfold in 1 10 3 30
     do
         sbatch --no-requeue /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $l0 $l1 $l2 $l1loss $l2loss $tem
     done

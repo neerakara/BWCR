@@ -29,8 +29,13 @@ def get_train_test_val_split_ids(cv_fold_num):
 
     if cv_fold_num == 1: # 'small training dataset'
         train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
-        train_test_val_split_ids['validation'] = np.arange(10, 15, 1).tolist()
+        train_test_val_split_ids['validation'] = np.arange(10, 12, 1).tolist()
         train_test_val_split_ids['train'] = np.arange(15, 20, 1).tolist()
+
+    elif cv_fold_num == 10: # 'small training dataset' | different data points
+        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
+        train_test_val_split_ids['validation'] = np.arange(12, 14, 1).tolist()
+        train_test_val_split_ids['train'] = np.arange(20, 25, 1).tolist()
 
     elif cv_fold_num == 2: # 'large training dataset'
         train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
@@ -77,6 +82,8 @@ def get_patient_folders(image_folder, sub_dataset):
             patient_id = int(folder.split('-')[2])
             if series_id == 1:
                 if sub_dataset == 'RUNMC' and patient_id > 30:
+                    continue
+                if sub_dataset == 'BMC' and patient_id == 55:
                     continue
                 folder_list.append(os.path.join(image_folder, folder))
 
@@ -382,8 +389,8 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
     sub_dataset = 'BMC'
-    cv_fold = 3
-    train_test_val = 'train'
+    cv_fold = 10
+    train_test_val = 'validation'
     size = (256, 256)
 
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/nci/'
@@ -427,7 +434,6 @@ if __name__ == '__main__':
         placenta_sizes = np.sum(subject_label, axis=(0,1))
         logging.info(placenta_sizes.shape)
         idx_largest = np.argmax(placenta_sizes)
-        idx_largest = subject_image.shape[-1]//2
         logging.info(idx_largest)
         slice_image = subject_image[:, :, idx_largest]
         slice_label = subject_label[:, :, idx_largest]
