@@ -382,8 +382,8 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
     sub_dataset = 'BMC'
-    cv_fold = 2
-    train_test_val = 'test'
+    cv_fold = 3
+    train_test_val = 'train'
     size = (256, 256)
 
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/nci/'
@@ -427,6 +427,7 @@ if __name__ == '__main__':
         placenta_sizes = np.sum(subject_label, axis=(0,1))
         logging.info(placenta_sizes.shape)
         idx_largest = np.argmax(placenta_sizes)
+        idx_largest = subject_image.shape[-1]//2
         logging.info(idx_largest)
         slice_image = subject_image[:, :, idx_largest]
         slice_label = subject_label[:, :, idx_largest]

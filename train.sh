@@ -28,7 +28,9 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/train2.py \
 --l0 $6 \
 --l1 $7 \
 --l2 $8 \
---temp $9
+--l1_loss $9 \
+--l2_loss ${10} \
+--temp ${11}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

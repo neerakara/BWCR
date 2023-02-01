@@ -17,7 +17,7 @@ def make_expdir_2(args):
     logdir = logdir + 'lr' + str(args.lr) + '_bs' + str(args.batch_size) + '/' 
 
     # invariance method
-    logdir = logdir + 'l0_' + str(args.l0) + '_l1_' + str(args.l1) + '_l2_' + str(args.l2) + '_t_' + str(args.temp) + '/'
+    logdir = logdir + 'l0_' + str(args.l0) + '_l1_' + args.l1_loss + '_' + str(args.l1) + '_l2_' + args.l2_loss + '_' + str(args.l2) + '_t_' + str(args.temp) + '/'
 
     # run number
     logdir = logdir + 'run' + str(args.run_number) + '/'

@@ -75,10 +75,13 @@ def make_1hot(y, n):
 
 # ==========================================
 # ==========================================    
-def get_losses(logits, targets, mask = None):
+def get_losses(logits, targets, mask = None, loss_type = 'ce'):
     
-    loss_pc = - targets * F.log_softmax(logits, dim=1) # pixel wise cross entropy
-    
+    if loss_type == 'ce':
+        loss_pc = - targets * F.log_softmax(logits, dim=1) # pixel wise cross entropy
+    elif loss_type == 'l2':
+        loss_pc = torch.square(logits - targets) # pixel wise square difference
+
     if mask != None:
         loss_pc = torch.mul(loss_pc, mask)
     
@@ -107,22 +110,24 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=3, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v7/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v8/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=11, type=int)
+    parser.add_argument('--max_iterations', default=20001, type=int)
     parser.add_argument('--log_frequency', default=50, type=int)
     parser.add_argument('--eval_frequency_tr', default=1000, type=int)
-    parser.add_argument('--eval_frequency_vl', default=10, type=int)
+    parser.add_argument('--eval_frequency_vl', default=100, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
 
     # no tricks: (100), data aug (010), data aug + consistency (011 / 012)
     parser.add_argument('--l0', default=1, type=float) # 0 / 1
     parser.add_argument('--l1', default=0, type=float) # 0 / 1
     parser.add_argument('--l2', default=0, type=float) # 0 / 1 
+    parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
+    parser.add_argument('--l2_loss', default='ce') # 'ce' / 'l2'
     parser.add_argument('--temp', default=1, type=float) # 1 / 2
         
     parser.add_argument('--run_number', default=1, type=int)
@@ -166,6 +171,12 @@ if __name__ == "__main__":
     # ===================================
     model = models.UNet2d(in_channels = 1, num_labels = args.num_labels, squeeze = False)
     model = model.to(device)
+
+    # ===================================
+    # define loss
+    # ===================================
+    dice_loss_function = DiceLoss(include_background=False)
+    dice_loss_function = dice_loss_function.to(device)
 
     # ===================================
     # define optimizer
@@ -224,15 +235,49 @@ if __name__ == "__main__":
         # =======================
         # D supervised losses on (1) original data, (2) transformed data 1 (in original coordinates), (3) transformed data 2
         # =======================
-        sup_loss0_pc, sup_loss0_p, sup_loss0 = get_losses(logits = outputs0[-1], targets = make_1hot(labels0_gpu, args.num_labels))
-        sup_loss1_pc, sup_loss1_p, sup_loss1 = get_losses(logits = logits1_inv, targets = make_1hot(labels1_inv, args.num_labels), mask = mask1)
-        sup_loss2_pc, sup_loss2_p, sup_loss2 = get_losses(logits = logits2_inv, targets = make_1hot(labels2_inv, args.num_labels), mask = mask2)
+        if args.l1_loss == 'dice':
+            sup_loss0 = dice_loss_function(F.softmax(outputs0[-1], dims=1), make_1hot(labels0_gpu, args.num_labels))
+            sup_loss1 = dice_loss_function(F.softmax(logits1_inv, dims=1), make_1hot(labels1_inv, args.num_labels))
+            sup_loss2 = dice_loss_function(F.softmax(logits2_inv, dims=1), make_1hot(labels2_inv, args.num_labels))
+
+            sup_loss0_p = labels0_gpu # irrelevant
+            sup_loss1_p = labels1_inv # irrelevant
+            sup_loss2_p = labels2_inv # irrelevant
+
+        else:
+            sup_loss0_pc, sup_loss0_p, sup_loss0 = get_losses(logits = outputs0[-1],
+                                                              targets = make_1hot(labels0_gpu, args.num_labels))
+        
+            sup_loss1_pc, sup_loss1_p, sup_loss1 = get_losses(logits = logits1_inv,
+                                                              targets = make_1hot(labels1_inv, args.num_labels),
+                                                              mask = mask1)
+        
+            sup_loss2_pc, sup_loss2_p, sup_loss2 = get_losses(logits = logits2_inv,
+                                                              targets = make_1hot(labels2_inv, args.num_labels),
+                                                              mask = mask2)
 
         # =======================
         # E consistency losses / soft label losses on (1) transformed data 1, (2) transformed data 2 (using the other's preds as soft targets)
         # =======================
-        con_loss1_pc, con_loss1_p, con_loss1 = get_losses(logits = logits1_inv, targets = F.softmax(logits2_inv / args.temp, dim = 1), mask = torch.mul(mask1, mask2))
-        con_loss2_pc, con_loss2_p, con_loss2 = get_losses(logits = logits2_inv, targets = F.softmax(logits1_inv / args.temp, dim = 1), mask = torch.mul(mask1, mask2))
+        if args.l2_loss == 'ce':
+            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(logits = logits1_inv,
+                                                              targets = F.softmax(logits2_inv / args.temp, dim = 1),
+                                                              mask = torch.mul(mask1, mask2))
+        
+            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(logits = logits2_inv,
+                                                              targets = F.softmax(logits1_inv / args.temp, dim = 1),
+                                                              mask = torch.mul(mask1, mask2))
+            
+        elif args.l2_loss == 'l2':
+            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(logits = logits1_inv,
+                                                              targets = logits2_inv,
+                                                              mask = torch.mul(mask1, mask2),
+                                                              loss_type = args.l2_loss)
+        
+            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(logits = logits2_inv,
+                                                              targets = logits1_inv,
+                                                              mask = torch.mul(mask1, mask2),
+                                                              loss_type = args.l2_loss)
 
         # =======================
         # add losses to tensorboard
@@ -259,12 +304,12 @@ if __name__ == "__main__":
         # ==========
         # log losses
         # ==========
-        logging.info('iter ' + str(iteration + 1) + 
-                        ', sup = ' + str(np.round(sup_loss0.detach().cpu().numpy(), 2)) +
-                        ', dataaug (1) = ' + str(np.round(sup_loss1.detach().cpu().numpy(), 2)) +
-                        ', dataaug (2) = ' + str(np.round(sup_loss2.detach().cpu().numpy(), 2)) +
-                        ', consistency (1) = ' + str(np.round(con_loss1.detach().cpu().numpy(), 2)) + 
-                        ', consistency (2) = ' + str(np.round(con_loss2.detach().cpu().numpy(), 2)))
+        # logging.info('iter ' + str(iteration + 1) + 
+        #                 ', sup = ' + str(np.round(sup_loss0.detach().cpu().numpy(), 2)) +
+        #                 ', dataaug (1) = ' + str(np.round(sup_loss1.detach().cpu().numpy(), 2)) +
+        #                 ', dataaug (2) = ' + str(np.round(sup_loss2.detach().cpu().numpy(), 2)) +
+        #                 ', consistency (1) = ' + str(np.round(con_loss1.detach().cpu().numpy(), 2)) + 
+        #                 ', consistency (2) = ' + str(np.round(con_loss2.detach().cpu().numpy(), 2)))
         
         # ===================================
         # evaluate on entire validation and test sets every once in a while
@@ -293,5 +338,5 @@ if __name__ == "__main__":
                         sup_loss0_p,
                         sup_loss1_p,
                         con_loss1_p], # total loss including supervised and smoothened loss
-                        vis_path + 'iter500.png')
+                        vis_path + 'iter' + str(iteration) + '.png')
 
