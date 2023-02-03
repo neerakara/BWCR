@@ -1,15 +1,15 @@
 #!/bin/bash
 anatomy='prostate'
-dataset='BMC'
 daprob=0.5
-l0=1.0
-l1=0.0
-l1loss='ce'
+l0=0.0
+l1=1.0
+l2=1.0
 tem=1.0
+l1loss='ce'
 l2loss='l2'
 runnum=1
 
-for l2 in 0.0
+for dataset in 'RUNMC'
 do
     for cvfold in 1 10 3 30
     do

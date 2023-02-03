@@ -128,6 +128,7 @@ if __name__ == "__main__":
     parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
     parser.add_argument('--l2_loss', default='ce') # 'ce' / 'l2'
     parser.add_argument('--temp', default=1, type=float) # 1 / 2
+    parser.add_argument('--teacher', default='ema') # 'self' / 'ema'
         
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
@@ -241,7 +242,10 @@ if __name__ == "__main__":
         # C (1) transform original images and labels (again), (2) get predictions, (3) invert geometric transforms
         # =======================
         inputs2_gpu, labels2_gpu, t2 = utils_data.transform_batch(inputs0_gpu, labels0_gpu, args.data_aug_prob, device)
-        outputs2 = model(inputs2_gpu)
+        if args.teacher == 'self':
+            outputs2 = model(inputs2_gpu)
+        elif args.teacher == 'ema':
+            outputs2 = model_ema(inputs2_gpu)
         logits2_inv, mask2 = invert_features(outputs2[-1], t2, 'bilinear', True, inputs2_gpu.shape, device)
         labels2_inv = invert_features(labels2_gpu, t2, 'nearest', False, inputs2_gpu.shape, device)
 
