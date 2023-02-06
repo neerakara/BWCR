@@ -34,7 +34,7 @@ def evaluate(args,
     model.eval()
 
     # evaluate dice for all subjects in ttv split of this subdataset
-    dice_scores = utils_data.evaluate(args, subdataset, ttv, model, device)
+    dice_scores = utils_data.evaluate(args.dataset, subdataset, args.cv_fold_num, ttv, model, device)
 
     # set model back to training mode
     model.train()

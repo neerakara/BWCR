@@ -9,6 +9,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import skimage.segmentation
+import imageio
+from PIL import Image, ImageDraw, ImageFont
+from skimage import data, color
+from skimage.segmentation import mark_boundaries
+
+# ==========================================================
+# ==========================================================
+def save_image_wo_normalization(image, savepath):
+    
+    plt.figure(figsize=(5, 5))
+    k=0
+    plt.imshow(image, cmap = 'gray')
+    plt.colorbar()
+    plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
+    return 0
 
 # ==========================================================
 # ==========================================================
@@ -46,23 +62,57 @@ def save_images_labels_all(images,
 
 # ==========================================================
 # ==========================================================
+def save_gif(image,
+             ground,
+             preds,
+             dices,
+             savepath,
+             s=75,
+             e=-75):
+    
+    images_vis = [np.random.randint(0, 10, size=(170, 170, 3), dtype=np.uint8) for i in range(len(preds))]
+    
+    for idx in range(len(images_vis)):
+        images_vis[idx] = normalize_img_for_vis(mark_boundaries(image[s:e,s:e], preds[idx][s:e,s:e], color=(1, 1, 1), mode='thick'))
+
+    # Convert the numpy arrays to PIL images
+    pil_images = [Image.fromarray(img) for img in images_vis]
+
+    # Add a title to each frame
+    for i, pil_image in enumerate(pil_images):
+        draw = ImageDraw.Draw(pil_image)
+        draw.text((10, 10), "Dice {}".format(dices[i]), (255, 0, 0))
+
+    # Save the list as a gif
+    pil_images[0].save(savepath,
+                       save_all=True,
+                       append_images=pil_images[1:],
+                       duration=100,
+                       loop=1)
+    
+# ==========================================================
+# ==========================================================
 def save_all(all,
-             savepath):
+             savepath,
+             torch_or_numpy = 'torch',
+             s=50,
+             e=200):
     
     num_things = len(all)
     bs = all[0].shape[0]
     
     plt.figure(figsize=(4*num_things, 4*bs))
     k=0
-    s=50
-    e=200
     
     for batch_index in range(bs):
 
         for t in range(num_things):
             
             plt.subplot(bs, num_things, num_things*batch_index + t + 1, xticks=[], yticks=[])
-            plt.imshow(np.rot90(all[t].detach().cpu().numpy()[batch_index,s:e,s:e], k), cmap = 'gray')
+            if torch_or_numpy == 'torch':
+                plt.imshow(np.rot90(all[t].detach().cpu().numpy()[batch_index,s:e,s:e], k), cmap = 'gray')
+            else:
+                plt.imshow(np.rot90(all[t][batch_index,s:e,s:e], k), cmap = 'gray')
             plt.colorbar()
     
     plt.savefig(savepath, bbox_inches='tight', dpi=50)

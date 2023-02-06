@@ -533,7 +533,7 @@ def predict_segmentation(image,
 def get_gt_label(subdataset,
                  subname):
     
-    label = data_loader.load_without_preproc(subdataset, subname)[1]
+    _, label = data_loader.load_without_preproc(subdataset, subname)
     
     label[label!=0] = 1
     
@@ -543,17 +543,28 @@ def get_gt_label(subdataset,
     return label
 
 # ======================================================
+# ======================================================
+def get_orig_image(subdataset,
+                   subname):
+    
+    image, _ = data_loader.load_without_preproc(subdataset, subname)
+        
+    if subdataset in ['UCL', 'HK', 'BIDMC']:
+        image = np.swapaxes(np.swapaxes(image, 0, 1), 1, 2)
+    
+    return image
+
+# ======================================================
 # Function used to evaluate entire training / validation sets during training
 # ======================================================
-def evaluate(args,
+def evaluate(dataset,
              subdataset,
+             cv_fold_num,
              ttv,
              model,
              device):
 
-    data = data_loader.load_data(args,
-                                 subdataset,
-                                 ttv)
+    data = data_loader.load_data(dataset, subdataset, cv_fold_num, ttv)
     
     dice_scores = []
     

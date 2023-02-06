@@ -33,7 +33,7 @@ def evaluate(args,
     model.eval()
 
     # evaluate dice for all subjects in ttv split of this subdataset
-    dice_scores = utils_data.evaluate(args, subdataset, ttv, model, device)
+    dice_scores = utils_data.evaluate(args.dataset, subdataset, args.cv_fold_num, ttv, model, device)
 
     # set model back to training mode
     model.train()
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     # load images and labels
     # ===================================
     logging.info('Reading training and validation data')
-    data_tr = data_loader.load_data(args, args.sub_dataset, 'train')
+    data_tr = data_loader.load_data(args.dataset, args.sub_dataset, args.cv_fold_num, 'train')
     images_tr = data_tr["images"]
     labels_tr = data_tr["labels"]
     subject_names_tr = data_tr["subject_names"]

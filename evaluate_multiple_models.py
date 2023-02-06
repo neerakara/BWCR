@@ -116,12 +116,12 @@ if __name__ == "__main__":
         # ===================================
         # evaluate each dataset one by one
         # ===================================
-        ind_val.append(utils_data.evaluate(args, 'RUNMC', 'validation', model, device))
-        ind_test.append(utils_data.evaluate(args, 'RUNMC', 'test', model, device))
-        ood_test_tmp = utils_data.evaluate(args, 'BMC', 'test', model, device)
-        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args, 'UCL', 'test', model, device)))
-        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args, 'HK', 'test', model, device)))
-        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args, 'BIDMC', 'test', model, device)))
+        ind_val.append(utils_data.evaluate(args.dataset, 'RUNMC', args.cv_fold_num, 'validation', model, device))
+        ind_test.append(utils_data.evaluate(args.dataset, 'RUNMC', args.cv_fold_num, 'test', model, device))
+        ood_test_tmp = utils_data.evaluate(args.dataset, 'BMC', args.cv_fold_num, 'test', model, device)
+        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args.dataset, 'UCL', args.cv_fold_num, 'test', model, device)))
+        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args.dataset, 'HK', args.cv_fold_num, 'test', model, device)))
+        ood_test_tmp = np.concatenate((ood_test_tmp, utils_data.evaluate(args.dataset, 'BIDMC', args.cv_fold_num, 'test', model, device)))
         ood_test.append(ood_test_tmp)
 
     np.save(results_path + 'ind_val_' + measure_var + '.npy', np.array(ind_val))

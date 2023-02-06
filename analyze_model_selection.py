@@ -140,7 +140,7 @@ if plot_val_ood_corr2 == True:
 def save_some_images(args, subdataset, ttv, augmented = False):
     
     bpath = '/data/scratch/nkarani/projects/crael/seg/logdir/v6/example_images/'
-    data = data_loader.load_data(args, subdataset, ttv)
+    data = data_loader.load_data(args.dataset, subdataset, args.cv_fold_num, ttv)
 
     if augmented == False:        
         for sub in range(4):

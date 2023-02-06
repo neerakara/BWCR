@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Evaluation experiment: ' + logging_dir)
     logging.info('Reading test data')
-    data_test = data_loader.load_data(args, args.test_sub_dataset, 'test')
+    data_test = data_loader.load_data(args.dataset, args.test_sub_dataset, args.cv_fold_num, 'test')
     images_ts = data_test["images"]
     labels_ts = data_test["labels"]
     depths_ts = data_test["depths"]
