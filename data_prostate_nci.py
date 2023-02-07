@@ -388,9 +388,9 @@ if __name__ == '__main__':
     # setup logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
-    sub_dataset = 'BMC'
-    cv_fold = 10
-    train_test_val = 'validation'
+    sub_dataset = 'RUNMC'
+    cv_fold = 30
+    train_test_val = 'train'
     size = (256, 256)
 
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/nci/'
@@ -403,7 +403,7 @@ if __name__ == '__main__':
                         cv_fold,
                         size,
                         target_resolution = (0.625, 0.625),
-                        force_overwrite=True)
+                        force_overwrite=False)
 
     # visualize
     images = data['images']

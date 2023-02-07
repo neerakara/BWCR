@@ -76,12 +76,18 @@ def make_1hot(y, n):
 
 # ==========================================
 # ==========================================    
-def get_losses(logits, targets, mask = None, loss_type = 'ce'):
+def get_losses(logits,
+               targets,
+               mask = None,
+               loss_type = 'ce',
+               margin = 0.1):
     
     if loss_type == 'ce':
         loss_pc = - targets * F.log_softmax(logits, dim=1) # pixel wise cross entropy
     elif loss_type == 'l2':
         loss_pc = torch.square(logits - targets) # pixel wise square difference
+    elif loss_type == 'l2_margin': # pixel wise square difference | thresholded at margin
+        loss_pc = torch.maximum(torch.square(logits - targets), margin * torch.ones_like(torch.square(logits - targets)))
 
     if mask != None:
         loss_pc = torch.mul(loss_pc, mask)
@@ -127,8 +133,9 @@ if __name__ == "__main__":
     parser.add_argument('--l2', default=0, type=float) # 0 / 1 
     parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
     parser.add_argument('--l2_loss', default='ce') # 'ce' / 'l2'
+    parser.add_argument('--l2_loss_margin', default=0.1, type=float) # 0.1
     parser.add_argument('--temp', default=1, type=float) # 1 / 2
-    parser.add_argument('--teacher', default='ema') # 'self' / 'ema'
+    parser.add_argument('--teacher', default='self') # 'self' / 'ema'
         
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
@@ -285,16 +292,18 @@ if __name__ == "__main__":
                                                               targets = F.softmax(logits1_inv / args.temp, dim = 1),
                                                               mask = torch.mul(mask1, mask2))
             
-        elif args.l2_loss == 'l2':
+        elif args.l2_loss in ['l2', 'l2_margin']:
             con_loss1_pc, con_loss1_p, con_loss1 = get_losses(logits = logits1_inv,
                                                               targets = logits2_inv,
                                                               mask = torch.mul(mask1, mask2),
-                                                              loss_type = args.l2_loss)
+                                                              loss_type = args.l2_loss,
+                                                              margin = args.l2_loss_margin)
         
             con_loss2_pc, con_loss2_p, con_loss2 = get_losses(logits = logits2_inv,
                                                               targets = logits1_inv,
                                                               mask = torch.mul(mask1, mask2),
-                                                              loss_type = args.l2_loss)
+                                                              loss_type = args.l2_loss,
+                                                              margin = args.l2_loss_margin)
 
         # =======================
         # add losses to tensorboard

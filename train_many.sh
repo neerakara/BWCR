@@ -11,7 +11,7 @@ runnum=1
 
 for dataset in 'RUNMC'
 do
-    for cvfold in 1 10 3 30
+    for cvfold in 3
     do
         sbatch --no-requeue /data/vision/polina/users/nkarani/projects/crael/seg/train.sh $anatomy $dataset $cvfold $runnum $daprob $l0 $l1 $l2 $l1loss $l2loss $tem
     done

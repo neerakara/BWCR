@@ -88,8 +88,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
     logging.info('Reading training and validation data')
-    data_tr = load_data(args, args.sub_dataset, 'train')
-    data_vl = load_data(args, args.sub_dataset, 'validation')
+    data_tr = load_data(args.dataset, args.sub_dataset, args.cv_fold_num, 'train')
+    data_vl = load_data(args.dataset, args.sub_dataset, args.cv_fold_num, 'validation')
 
     images_tr = data_tr["images"]
     labels_tr = data_tr["labels"]
