@@ -96,7 +96,8 @@ def save_all(all,
              savepath,
              torch_or_numpy = 'torch',
              s=50,
-             e=200):
+             e=200,
+             cmaps=None):
     
     num_things = len(all)
     bs = all[0].shape[0]
@@ -107,12 +108,17 @@ def save_all(all,
     for batch_index in range(bs):
 
         for t in range(num_things):
+
+            if cmaps != None:
+                cmap = cmaps[t]
+            else:
+                cmap = 'gray'
             
             plt.subplot(bs, num_things, num_things*batch_index + t + 1, xticks=[], yticks=[])
             if torch_or_numpy == 'torch':
-                plt.imshow(np.rot90(all[t].detach().cpu().numpy()[batch_index,s:e,s:e], k), cmap = 'gray')
+                plt.imshow(np.rot90(all[t].detach().cpu().numpy()[batch_index,s:e,s:e], k), cmap = cmap)
             else:
-                plt.imshow(np.rot90(all[t][batch_index,s:e,s:e], k), cmap = 'gray')
+                plt.imshow(np.rot90(all[t][batch_index,s:e,s:e], k), cmap = cmap)
             plt.colorbar()
     
     plt.savefig(savepath, bbox_inches='tight', dpi=50)

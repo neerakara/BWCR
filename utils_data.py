@@ -492,6 +492,29 @@ def get_batch_subject(image, b, bs, device):
 
 # ======================================================
 # ======================================================
+def predict_logits_and_probs(image,
+                             model,
+                             device):
+    
+    bsize = 8
+
+    for b in range(np.ceil(image.shape[-1] / bsize).astype(int)):
+
+        x_batch = get_batch_subject(image, b, bsize, device)
+        logits_gpu_this_batch = model(x_batch)[-1]
+        
+        if b == 0:
+            logits_gpu = logits_gpu_this_batch
+        else:
+            logits_gpu = torch.cat((logits_gpu, logits_gpu_this_batch), dim = 0)
+
+    probs = torch.nn.Softmax(dim=1)(logits_gpu).detach().cpu().numpy()
+    logits = logits_gpu.detach().cpu().numpy()
+
+    return logits, probs
+
+# ======================================================
+# ======================================================
 def predict_segmentation(image,
                          model,
                          device,
@@ -500,29 +523,14 @@ def predict_segmentation(image,
                          nx,
                          ny):
 
-    bsize = 8
-    n_batches = np.ceil(image.shape[-1] / bsize).astype(int)
-    
-    for b in range(n_batches):
-
-        x_batch = get_batch_subject(image, b, bsize, device)
-        
-        preds_gpu_this_batch = torch.nn.Softmax(dim=1)(model(x_batch)[-1])
-        
-        if b == 0:
-            preds_gpu = preds_gpu_this_batch
-        
-        else:
-            preds_gpu = torch.cat((preds_gpu, preds_gpu_this_batch), dim = 0)
-
-    preds_soft = preds_gpu.detach().cpu().numpy()[:, 1, :, :]
+    preds_soft = predict_logits_and_probs(image, model, device)[-1][:, 1, :, :]
     
     preds_hard = (preds_soft > 0.5).astype(np.float32)
     
     preds_hard = utils_data.rescale_and_crop(preds_hard,
-                                            scale = (0.625 / px, 0.625 / py),
-                                            size = (nx, ny),
-                                            order = 0).astype(np.uint8)
+                                             scale = (0.625 / px, 0.625 / py),
+                                             size = (nx, ny),
+                                             order = 0).astype(np.uint8)
     
     preds_hard = np.swapaxes(np.swapaxes(preds_hard, 0, 1), 1, 2)
 

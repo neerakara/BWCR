@@ -14,6 +14,7 @@ import models
 import utils_data
 import utils_vis
 import utils_generic
+import utils_losses
 import data_loader
 import csv
 # eval metrics
@@ -55,22 +56,27 @@ def compute_metrics(pred,
 # ===================================================
 def write_results_to_file(results_path,
                           test_subdataset,  
-                          subject_dices,
+                          subject_metrics,
                           subject_names_ts,
-                          num_decimals = 4):
+                          num_decimals = 4,
+                          metric = 'dice'):
     
-    with open(results_path + '/' + test_subdataset + '.csv', mode='w') as csv_file:
+    with open(results_path + '/' + test_subdataset + '_' + metric + '.csv', mode='w') as csv_file:
         
         csv_file = csv.writer(csv_file, delimiter=',')
-        csv_file.writerow(['subject', 'dice'])
+        
+        csv_file.writerow(['subject', metric])
         csv_file.writerow(['--------', '--------'])
+        
         # for each subject
         for s in range(len(subject_names_ts)):
-            csv_file.writerow([subject_names_ts[s], np.round(subject_dices[s], num_decimals)])
+            csv_file.writerow([subject_names_ts[s], np.round(subject_metrics[s], num_decimals)])
         csv_file.writerow(['--------', '--------'])
-        subject_dices_array = np.array(subject_dices)
-        csv_file.writerow(['Mean', np.round(np.mean(subject_dices_array), num_decimals)])
-        csv_file.writerow(['Standard deviation', np.round(np.std(subject_dices_array), num_decimals)])
+        
+        # statistics
+        subject_metrics_array = np.array(subject_metrics)
+        csv_file.writerow(['Mean', np.round(np.mean(subject_metrics_array), num_decimals)])
+        csv_file.writerow(['Standard deviation', np.round(np.std(subject_metrics_array), num_decimals)])
         csv_file.writerow(['--------', '--------'])
 
     return 0
@@ -98,26 +104,25 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=2, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v5/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v8/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
     parser.add_argument('--lr', default=0.0001, type=float)
-    parser.add_argument('--lr_schedule', default=2, type=int)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--batch_size_test', default=4, type=int)
     
-    parser.add_argument('--model_has_heads', default=1, type=int)    
-    parser.add_argument('--method_invariance', default=3, type=int) # 0: no reg, 1: data aug, 2: consistency, 3: consistency in each layer
-    parser.add_argument('--lambda_dataaug', default=1.0, type=float) # weight for data augmentation loss
-    parser.add_argument('--consis_loss', default=1, type=int) # 1: MSE | 2: MSE of normalized images (BYOL)
-    parser.add_argument('--lambda_consis', default=0.1, type=float) # weight for regularization loss (consistency overall)
-    parser.add_argument('--alpha_layer', default=100.0, type=float) # growth of regularization loss weight with network depth
+    # no tricks: (100), data aug (010), data aug + consistency (011 / 012)
+    parser.add_argument('--l0', default=0.0, type=float) # 0 / 1
+    parser.add_argument('--l1', default=1.0, type=float) # 0 / 1
+    parser.add_argument('--l2', default=1.0, type=float) # 0 / 1 
+    parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
+    parser.add_argument('--l2_loss', default='l2') # 'ce' / 'l2' / 'l2_margin' 
+    parser.add_argument('--l2_loss_margin', default=0.1, type=float) # 0.1
+    parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
+    parser.add_argument('--teacher', default='self') # 'self' / 'ema'
     
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
-
-    parser.add_argument('--model_prefix', default='model') # best_val / model
     
     args = parser.parse_args()
 
@@ -138,11 +143,31 @@ if __name__ == "__main__":
     # ===================================
     # directories
     # ===================================
-    logging_dir = utils_generic.make_expdir(args)
+    logging_dir = utils_generic.make_expdir_2(args)
     models_path = logging_dir + 'models/'
-    results_path = logging_dir + 'results/' + args.model_prefix + '/'
+    results_path = logging_dir + 'results/'
     if not os.path.exists(results_path):
         os.makedirs(results_path)
+
+    # ===================================
+    # define model
+    # ===================================
+    logging.info('Defining segmentation model')
+    model = models.UNet2d(in_channels = 1, num_labels = args.num_labels, squeeze = False)
+    model = model.to(device)
+
+    # ===================================
+    # load model weights
+    # ===================================
+    modelpath = utils_generic.get_best_modelpath(models_path, 'best_ema_val_iter')
+    logging.info('loading model weights from: ')
+    logging.info(modelpath)
+    model.load_state_dict(torch.load(modelpath)['state_dict'])
+
+    # ===================================
+    # Set model to eval mode
+    # ===================================
+    model.eval()
 
     # ===================================
     # load test images and labels
@@ -156,96 +181,33 @@ if __name__ == "__main__":
     subject_names_ts = data_test["subject_names"]
 
     # ===================================
-    # define model
-    # ===================================
-    logging.info('Defining segmentation model')
-    if args.model_has_heads == 1:
-        model = models.UNet2d_with_heads(in_channels = 1,
-                                         num_labels = args.num_labels,
-                                         squeeze = False)
-    elif args.model_has_heads == 0:
-        model = models.UNet2d(in_channels = 1,
-                              num_labels = args.num_labels,
-                              squeeze = False)
-    model = model.to(device)
-
-    # ===================================
-    # load model weights
-    # ===================================
-    modelpath = utils_generic.get_best_modelpath(models_path, args.model_prefix)
-    logging.info('loading model weights from: ')
-    logging.info(modelpath)
-    model.load_state_dict(torch.load(modelpath)['state_dict'])
-
-    # ===================================
-    # Set model to eval mode
-    # ===================================
-    model.eval()
-
-    # ===================================
     # evaluate each subject one by one
     # ===================================
     num_subjects_ts = subject_names_ts.shape[0]
     logging.info('number of test subjects: ' + str(num_subjects_ts))
     logging.info('depth dimensions of these test subjects: ' + str(depths_ts))
     subject_dices = []
+    subject_eces = []
     
+    images_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
+    labels_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
+    logits0_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
+    logits1_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
+    prob_fg_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
+
     for sub in range(num_subjects_ts):
     
+        # get subject's image and labels
         subject_name = subject_names_ts[sub]
         logging.info(subject_name)
-        sub_start = int(np.sum(depths_ts[:sub]))
-        sub_end = int(np.sum(depths_ts[:sub+1]))
-        subject_image = images_ts[:,:,sub_start:sub_end]
-        subject_label = labels_ts[:,:,sub_start:sub_end]
+        subject_image = images_ts[:,:,int(np.sum(depths_ts[:sub])):int(np.sum(depths_ts[:sub+1]))]
+        subject_label = labels_ts[:,:,int(np.sum(depths_ts[:sub])):int(np.sum(depths_ts[:sub+1]))]
 
-        for b in range(subject_image.shape[-1] // args.batch_size_test + 1):
+        # make prediction
+        logits, probs = utils_data.predict_logits_and_probs(subject_image, model, device)
+        soft_prediction = probs[:,1,:,:]
 
-            if (b+1) * args.batch_size_test < subject_image.shape[-1]:
-                x_batch = subject_image[:, :, b*args.batch_size_test : (b+1) * args.batch_size_test]
-            elif b * args.batch_size_test == subject_image.shape[-1]:
-                break
-            else:
-                x_batch = subject_image[:, :, b*args.batch_size_test : ]
-                        
-            # ===================
-            # swap axes to bring batch dimension from the back to the front
-            # ===================
-            x_batch = np.swapaxes(np.swapaxes(x_batch, 2, 1), 1, 0)
-            
-            # ===================
-            # add channel axis
-            # ===================
-            x_batch = np.expand_dims(x_batch, axis = 1)
-            
-            # ===================
-            # send to gpu
-            # ===================
-            x_batch_gpu = utils_data.torch_and_send_to_device(x_batch, device)
-            
-            # ===================
-            # make prediction
-            # ===================
-            outputs = model(x_batch_gpu)
-            predicted_probs_gpu_this_batch = torch.nn.Softmax(dim=1)(outputs[-1])
-            
-            # ===================
-            # accumulate predictions
-            # ===================
-            if b == 0:
-                predicted_probs_gpu = predicted_probs_gpu_this_batch
-            else:
-                predicted_probs_gpu = torch.cat((predicted_probs_gpu, predicted_probs_gpu_this_batch), dim = 0)
-
-        # ===================
-        # move prediction to cpu
-        # ===================
-        predicted_probs_cpu = predicted_probs_gpu.detach().cpu().numpy()
-        
-        # ===================
-        # working with binary segmentations for now
-        # ===================
-        soft_prediction = predicted_probs_cpu[:, 1, :, :]
+        # threshold probability
         hard_prediction = (soft_prediction > 0.5).astype(np.float32)
 
         # ===================
@@ -270,6 +232,16 @@ if __name__ == "__main__":
                                                                             scale = (0.625 / data_test["px"][sub], 0.625 / data_test["py"][sub]),
                                                                             size = (data_test["nx"][sub], data_test["ny"][sub]),
                                                                             order = 0).astype(np.uint8)
+            
+            probs_fg_orig_res_and_size = utils_data.rescale_and_crop(probs[:,1,:,:],
+                                                                     scale = (0.625 / data_test["px"][sub], 0.625 / data_test["py"][sub]),
+                                                                     size = (data_test["nx"][sub], data_test["ny"][sub]),
+                                                                     order = 1)
+            probs_bg_orig_res_and_size = 1 - probs_fg_orig_res_and_size
+            probs_orig_res_and_size = np.stack((probs_bg_orig_res_and_size, probs_fg_orig_res_and_size), axis = 1)
+
+            # compute calibration error
+            subject_eces.append(utils_losses.ece_eval(probs_orig_res_and_size, np.swapaxes(np.swapaxes(label_orig, 1, 2), 0, 1), n_bins=15)[0])
 
         elif args.dataset in ['placenta', 'ms']:
             hard_prediction_orig_res_and_size = hard_prediction
@@ -294,12 +266,30 @@ if __name__ == "__main__":
                                results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
 
         # ===================
-        # compute metrics
+        # compute dice
         # ===================
-        scores = compute_metrics(pred = hard_prediction_orig_res_and_size, label = label_orig)
-        subject_dices.append(np.round(scores[0], 3))
+        subject_dices.append(compute_metrics(pred = hard_prediction_orig_res_and_size, label = label_orig)[0])
 
-    write_results_to_file(results_path,
-                          args.test_sub_dataset,
-                          subject_dices,
-                          subject_names_ts)
+        # ===================
+        # collect 2d slices with largest foreground
+        # ===================
+        idx = np.argmax(np.sum(subject_label, axis=(0,1)))
+        images_all[sub, :, :] = subject_image[:, :, idx]
+        labels_all[sub, :, :] = subject_label[:, :, idx]
+        logits0_all[sub, :, :] = logits[idx, 0, :, :]
+        logits1_all[sub, :, :] = logits[idx, 1, :, :]
+        prob_fg_all[sub, :, :] = soft_prediction[idx, :, :]
+
+    # ===================
+    # visualize results
+    # ===================
+    utils_vis.save_all([images_all, labels_all, logits0_all, logits1_all, prob_fg_all],
+                        results_path + args.test_sub_dataset + '_all.png',
+                        'numpy',
+                        cmaps = ['gray', 'gray', 'gray', 'gray', 'jet'])
+        
+    # ===================
+    # write quantitative results
+    # ===================
+    write_results_to_file(results_path, args.test_sub_dataset, subject_dices, subject_names_ts, metric = 'dice')
+    write_results_to_file(results_path, args.test_sub_dataset, subject_eces, subject_names_ts, metric = 'ece')
