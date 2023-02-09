@@ -41,6 +41,12 @@ def evaluate(args,
     return dice_scores
 
 # ==========================================
+# tensor: features to be inverted geometrically
+# transfomation: geometric transformation parameters
+# interp: nearest / bilinear
+# need_mask: true / false: mask shielding pixels introduced by the forward transform
+# default_shape: shape at the input level. mask will be forward transformed at this resolution, then subsampled to match tensor resolution, then inverse transformed
+# device: for computations to be done on gpu
 # ==========================================
 def invert_features(tensor,
                     transformation,
@@ -76,23 +82,25 @@ def make_1hot(y, n):
 
 # ==========================================
 # ==========================================    
-def get_losses(logits,
+def get_losses(preds,
                targets,
                mask = None,
                loss_type = 'ce',
                margin = 0.1):
     
     if loss_type == 'ce':
-        loss_pc = - targets * F.log_softmax(logits, dim=1) # pixel wise cross entropy
+        loss_pc = - targets * F.log_softmax(preds, dim=1) # pixel wise cross entropy
     elif loss_type == 'l2':
-        loss_pc = torch.square(logits - targets) # pixel wise square difference
+        loss_pc = torch.square(preds - targets) # pixel wise square difference
+    elif loss_type == 'l2_all':
+        loss_pc = torch.square(preds - targets) # pixel wise square difference (using another tag to indicate consistency at all layers)
     elif loss_type == 'l2_margin': # pixel wise square difference | thresholded at margin
-        loss_pc = torch.maximum(torch.square(logits - targets), margin * torch.ones_like(torch.square(logits - targets)))
+        loss_pc = torch.maximum(torch.square(preds - targets), margin * torch.ones_like(torch.square(preds - targets)))
 
     if mask != None:
         loss_pc = torch.mul(loss_pc, mask)
     
-    loss_p = torch.mean(loss_pc, dim = 1) # average both classes
+    loss_p = torch.mean(loss_pc, dim = 1) # average across channels (classes in the last layer)
     loss = torch.mean(loss_p) # mean over all pixels and all images in the batch
     
     return loss_pc, loss_p, loss
@@ -132,8 +140,9 @@ if __name__ == "__main__":
     parser.add_argument('--l1', default=0, type=float) # 0 / 1
     parser.add_argument('--l2', default=0, type=float) # 0 / 1 
     parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
-    parser.add_argument('--l2_loss', default='ce') # 'ce' / 'l2'
+    parser.add_argument('--l2_loss', default='ce') # 'ce' / 'l2' / 'l2_margin' / 'l2_all' / 'l2_all_margin'
     parser.add_argument('--l2_loss_margin', default=0.1, type=float) # 0.1
+    parser.add_argument('--alpha_layer', default=1.0, type=float) # 1.0
     parser.add_argument('--temp', default=1, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
         
@@ -269,14 +278,14 @@ if __name__ == "__main__":
             sup_loss2_p = labels2_inv # irrelevant
 
         else:
-            sup_loss0_pc, sup_loss0_p, sup_loss0 = get_losses(logits = outputs0[-1],
+            sup_loss0_pc, sup_loss0_p, sup_loss0 = get_losses(preds = outputs0[-1],
                                                               targets = make_1hot(labels0_gpu, args.num_labels))
         
-            sup_loss1_pc, sup_loss1_p, sup_loss1 = get_losses(logits = logits1_inv,
+            sup_loss1_pc, sup_loss1_p, sup_loss1 = get_losses(preds = logits1_inv,
                                                               targets = make_1hot(labels1_inv, args.num_labels),
                                                               mask = mask1)
         
-            sup_loss2_pc, sup_loss2_p, sup_loss2 = get_losses(logits = logits2_inv,
+            sup_loss2_pc, sup_loss2_p, sup_loss2 = get_losses(preds = logits2_inv,
                                                               targets = make_1hot(labels2_inv, args.num_labels),
                                                               mask = mask2)
 
@@ -284,26 +293,69 @@ if __name__ == "__main__":
         # E consistency losses / soft label losses on (1) transformed data 1, (2) transformed data 2 (using the other's preds as soft targets)
         # =======================
         if args.l2_loss == 'ce':
-            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(logits = logits1_inv,
+            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(preds = logits1_inv,
                                                               targets = F.softmax(logits2_inv / args.temp, dim = 1),
                                                               mask = torch.mul(mask1, mask2))
         
-            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(logits = logits2_inv,
+            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(preds = logits2_inv,
                                                               targets = F.softmax(logits1_inv / args.temp, dim = 1),
                                                               mask = torch.mul(mask1, mask2))
             
         elif args.l2_loss in ['l2', 'l2_margin']:
-            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(logits = logits1_inv,
+            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(preds = logits1_inv,
                                                               targets = logits2_inv,
                                                               mask = torch.mul(mask1, mask2),
                                                               loss_type = args.l2_loss,
                                                               margin = args.l2_loss_margin)
         
-            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(logits = logits2_inv,
+            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(preds = logits2_inv,
                                                               targets = logits1_inv,
                                                               mask = torch.mul(mask1, mask2),
                                                               loss_type = args.l2_loss,
                                                               margin = args.l2_loss_margin)
+
+        # =======================
+        # F consistency losses at all layers
+        # =======================
+        elif args.l2_loss in ['l2_all']:
+            
+            cons_loss1_layer_l = []
+            weight_layer_l = []
+            num_layers = len(outputs1)
+
+            for l in range(num_layers):
+
+                # invert geometric transform
+                features1_inv, mask1 = invert_features(outputs1[l], t1, 'bilinear', True, inputs1_gpu.shape, device)
+                features2_inv, mask2 = invert_features(outputs2[l], t2, 'bilinear', True, inputs2_gpu.shape, device)
+                
+                # compute consistency loss
+                _, con_loss1_p, con_loss1_l = get_losses(preds = features1_inv,
+                                                         targets = features2_inv,
+                                                         mask = torch.mul(mask1, mask2),
+                                                         loss_type = args.l2_loss,
+                                                         margin = args.l2_loss_margin)
+                cons_loss1_layer_l.append(con_loss1_l)
+                
+                # add loss to tb
+                writer.add_scalar("Loss/cons1_L"+str(l+1), cons_loss1_layer_l[l], iteration+1)
+
+                # define weight for this layer
+                weight_layer_l.append((((l+1) / num_layers) ** args.alpha_layer))                
+                writer.add_scalar("Weights/cons1_L"+str(l+1), weight_layer_l[l], iteration+1)
+
+            # # normalize weights for each layer by total weight for consistency loss
+            # total_weight = sum(weight_layer_l)
+            # for l in range(num_layers):    
+            #     weight_layer_l[l] = weight_layer_l[l] / total_weight
+            #     # not normalizing the weights may be the right thing to do
+            #     # that would allow us to compare the effect of adding constraints in previous layers by reducing alpha values
+            #     # currently reducing alpha values reduces constraints in later layers in order to increase constraints in previous layers
+            #     writer.add_scalar("Weights/cons1_L"+str(l+1), weight_layer_l[l], iteration+1)
+
+            # total consistency loss
+            con_loss1 = sum(i[0] * i[1] for i in zip(weight_layer_l, cons_loss1_layer_l))
+            con_loss2 = con_loss1
 
         # =======================
         # add losses to tensorboard

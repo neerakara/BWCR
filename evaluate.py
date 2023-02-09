@@ -116,8 +116,9 @@ if __name__ == "__main__":
     parser.add_argument('--l1', default=1.0, type=float) # 0 / 1
     parser.add_argument('--l2', default=1.0, type=float) # 0 / 1 
     parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
-    parser.add_argument('--l2_loss', default='l2') # 'ce' / 'l2' / 'l2_margin' 
+    parser.add_argument('--l2_loss', default='l2_all') # 'ce' / 'l2' / 'l2_margin' 
     parser.add_argument('--l2_loss_margin', default=0.1, type=float) # 0.1
+    parser.add_argument('--alpha_layer', default=10.0, type=float) # 1.0
     parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
     

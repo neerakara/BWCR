@@ -18,12 +18,14 @@ def make_expdir_2(args):
 
     # invariance method
     logdir = logdir + 'l0_' + str(args.l0) 
-    logdir = logdir + '_l1_' + args.l1_loss + '_' + str(args.l1) 
-    logdir = logdir + '_l2_' + args.l2_loss + '_' + str(args.l2) 
+    logdir = logdir + '/l1_' + args.l1_loss + '_' + str(args.l1) 
+    logdir = logdir + '/l2_' + args.l2_loss + '_' + str(args.l2) 
     if args.l2_loss == 'l2_margin':
-        logdir = logdir + '_' + str(args.l2_loss_margin)
+        logdir = logdir + '/' + str(args.l2_loss_margin)
+    if args.l2_loss == 'l2_all':
+        logdir = logdir + '/alpha' + str(args.alpha_layer)
     if args.teacher != 'self':
-        logdir = logdir + '_teacher_' + args.teacher
+        logdir = logdir + '/teacher_' + args.teacher
     logdir = logdir + '_t_' + str(args.temp) + '/'
 
     # run number
