@@ -108,7 +108,9 @@ class UNet2d(nn.Module):
                  in_channels = 1,
                  num_labels = 1,
                  squeeze = False,
-                 returnlist = 2): # 1 logits, 2 features_and_logits
+                 returnlist = 2, # 1: logits, 2: features_and_logits
+                 output_layer_type = 1,  # 1: num_labels output channels are predicted, 2: (num_labels - 1) output channels are predicted, channel 0 is fixed to constant (0).
+                 device = 0):
 
         super(UNet2d, self).__init__()
         n0 = 16        
@@ -125,8 +127,13 @@ class UNet2d(nn.Module):
         self.dec_conv2 = ConvBlock2d(8*n0, 2*n0)
         self.dec_conv3 = ConvBlock2d(4*n0, n0)
         self.dec_conv4 = ConvBlock2d(2*n0, n0)
-        # final conv layer for segmentation (has one conv layer that outputs "num_labels" channels, no non-linearity)
-        self.out_conv = OutConvBlock2d(n0, num_labels)
+        if output_layer_type == 1:
+            # final conv layer for segmentation (has one conv layer that outputs "num_labels" channels, no non-linearity)
+            self.out_conv = OutConvBlock2d(n0, num_labels)
+        elif output_layer_type == 2:
+            # final conv layer for segmentation (has one conv layer that outputs "num_labels" channels, no non-linearity)
+            # but only the last (num_labels - 1) channels are 'learned'
+            self.out_conv = OutConvBlock2d_Nmimus1(n0, num_labels, device)
         # squeeze
         self.squeeze = squeeze
         # what to return
@@ -365,3 +372,16 @@ class OutConvBlock2d(nn.Module):
     def forward(self, x):
         x = self.conv(x)
         return x
+    
+# ======================================================
+# A 2d conv layer, without batch norm or activation function
+# ======================================================
+class OutConvBlock2d_Nmimus1(nn.Module):
+    def __init__(self, in_size, out_size, device):
+        super(OutConvBlock2d_Nmimus1, self).__init__()
+        self.conv = nn.Sequential(nn.Conv2d(in_size, out_size - 1, kernel_size=3, padding=1))
+        self.device = device
+
+    def forward(self, x):
+        x = self.conv(x)
+        return torch.cat((torch.zeros(x.shape, dtype=x.dtype).to(self.device), x), dim=1) # logits of class 0 fixed to 0

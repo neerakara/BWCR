@@ -12,6 +12,7 @@ import scipy.ndimage.interpolation
 import logging
 from scipy.ndimage.interpolation import map_coordinates
 from scipy.ndimage.filters import gaussian_filter
+from scipy import ndimage
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 import torchvision.transforms as tt
@@ -599,3 +600,34 @@ def evaluate(dataset,
             dice_scores.append(utils_generic.dice(im1 = pred, im2 = label))
 
     return np.array(dice_scores)
+
+# ======================================================
+# compute signed distance transform
+# inside the fg is positive, outside is negative
+# on the fg boundary is 0
+# ======================================================
+def compute_sdt(binary_label):
+    signed_distance = ndimage.distance_transform_edt(binary_label, return_distances=True)
+    signed_distance -= ndimage.distance_transform_edt(1 - binary_label, return_distances=True)
+    signed_distance = np.floor(signed_distance)
+    signed_distance[signed_distance > 0.0] = signed_distance[signed_distance > 0.0] - 1.0 # setting boundary to 0
+    return signed_distance
+
+# ======================================================
+# compute weight per pixel, depending on the signed distance transform
+# ======================================================
+def compute_lambda_map(sdt,
+                       R = 10.0, # margin around the boundary where the lambda values vary
+                       lmin = 0.01, # min value (applied to pixels farther away than the margin)
+                       lmax = 1.0, # max value (applied to pixels on the tissue boundary)
+                       alp = 1.0): # (rate of change of weights: 1.0 leads to linear change with distance)
+    
+    # label with very small or no foreground
+    if np.max(sdt) < 1.0:
+        # setting all pixels to a large value, so that they are assigned small weights
+        sdt[sdt < 1.0] = R + 1.0 
+        
+    # not differentiating inside v/s outside to determine the lambda | only absolute distance from the boundary matters
+    sdt = np.abs(sdt)
+        
+    return lmax * (np.maximum(R - sdt, 0.0) / R) ** alp + lmin

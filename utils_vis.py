@@ -727,3 +727,58 @@ def plot_ind_ood_corr2(ind_val,
     plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,10:20], savepath + '_UCL.png')
     plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,20:30], savepath + '_HK.png')
     plot_ind_ood_corr_2_sub_dataset(ind_val, ood_tst[:,:,30:40], savepath + '_BIDMC.png')
+
+# ============================================================================
+# ============================================================================
+def find_roi(arr,
+             roi = 'full', # full / corner
+             delta = 15): 
+    
+    idx = np.sum(arr, axis = 1)
+    idxx = np.nonzero(idx)[0]
+    sx = idxx[0] - delta
+    if roi == 'full':
+        ex = idxx[-1] + delta
+    elif roi == 'corner':
+        ex = idxx[0] + delta
+    
+    idy = np.sum(arr, axis = 0)
+    idyy = np.nonzero(idy)[0]
+    sy = idyy[0] - delta
+    if roi == 'full':
+        ey = idyy[-1] + delta
+    elif roi == 'corner':
+        ey = idyy[0] + delta
+    
+    return sx, ex, sy, ey
+
+# ============================================================================
+# ============================================================================
+def add_subplot(ax,
+                fig,
+                arr,
+                title,
+                sx = 60,
+                ex = -100,
+                sy = 60,
+                ey = -60,
+                cmap = 'gray',
+                colorbar = 'on'):
+    
+    im = ax.imshow(arr[sx:ex, sy:ey], cmap = cmap)
+    if colorbar == 'on':
+        fig.colorbar(im, ax=ax)
+    ax.set_title(title)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    return 0
+
+# ================================================
+# ================================================
+def show_array(arr, title = ''):
+    plt.figure()
+    plt.imshow(arr, 'gray')
+    plt.colorbar()
+    plt.title(title)
+    plt.show()
+    plt.close()

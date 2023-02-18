@@ -19,7 +19,7 @@
 source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
 ## EXECUTION OF PYTHON CODE:
-python /data/vision/polina/users/nkarani/projects/crael/seg/train2.py \
+python /data/vision/polina/users/nkarani/projects/crael/seg/pixewise_logit_evol.py \
 --dataset $1 \
 --sub_dataset $2 \
 --cv_fold_num $3 \
