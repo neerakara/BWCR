@@ -2,6 +2,7 @@ import data_placenta
 import data_prostate_nci
 import data_prostate_promise
 import data_ms
+import data_acdc
 import argparse
 import logging
 import numpy as np
@@ -54,6 +55,16 @@ def load_data(dataset,
                                     train_test_val = train_test_val,
                                     size = (192, 192),
                                     target_resolution = (1.0, 1.0))
+        
+    elif dataset == 'acdc':
+        data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/acdc/' # orig data is here
+        data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/acdc/' # save processed data here
+        data = data_acdc.load_dataset(data_orig_path,
+                                      data_proc_path,
+                                      train_test_val = train_test_val,
+                                      cv_fold = cv_fold_num,
+                                      size = (192, 192),
+                                      target_resolution = (1.33, 1.33))
 
     return data
 
