@@ -12,6 +12,8 @@ def make_expdir_2(args):
         logdir = args.save_path + args.dataset + '/' + args.sub_dataset + '/cv' + str(args.cv_fold_num) + '/'
     elif args.dataset == 'ms':
         logdir = args.save_path + args.dataset + '/'
+    elif args.dataset == 'acdc':
+        logdir = args.save_path + args.dataset + '/cv' + str(args.cv_fold_num) + '/' 
 
     # optimization related
     logdir = logdir + 'lr' + str(args.lr) + '_bs' + str(args.batch_size) + '/' 
@@ -51,6 +53,8 @@ def make_expdir(args):
         logdir = args.save_path + args.dataset + '/' + args.sub_dataset + '/cv' + str(args.cv_fold_num) + '/'
     elif args.dataset == 'ms':
         logdir = args.save_path + args.dataset + '/'
+    elif args.dataset == 'acdc':
+        logdir = args.save_path + args.dataset + '/cv' + str(args.cv_fold_num) + '/' 
 
     # optimization related
     if args.optimizer == 'sgd':
@@ -111,6 +115,7 @@ def get_best_modelpath(models_path, prefix):
     return models_path + best_model
 
 # ======================================================
+# ONLY WORKS FOR BINARY SEGMENTATIONS
 # ======================================================
 def dice(im1,
          im2,
@@ -131,3 +136,41 @@ def dice(im1,
     intersection = np.logical_and(im1, im2)
 
     return 2. * intersection.sum() / im_sum
+
+# ======================================================
+# WORKS FOR BINARY AS WELL AS MULTILABEL SEGMENTATIONS
+# ======================================================
+def dice_score(seg1, seg2, num_labels):
+    """
+    Compute the Dice score between two multilabel segmentations for each label separately.
+    
+    Parameters
+    ----------
+    seg1, seg2 : numpy arrays of the same shape
+        Two multilabel segmentations to compare.
+    num_labels : int
+        The total number of labels in the segmentations.
+    
+    Returns
+    -------
+    dice : numpy array of shape (num_labels,)
+        The Dice score between the segmentations for each label separately.
+    """
+    dice = np.zeros(num_labels)
+    
+    for label in range(num_labels):
+        # Create one-hot encoded segmentations for the current label
+        seg1_onehot = (seg1 == label).astype(np.float32)
+        seg2_onehot = (seg2 == label).astype(np.float32)
+
+        # Compute the intersection between the segmentations
+        intersection = np.sum(seg1_onehot * seg2_onehot)
+
+        # Compute the sum of the segmentations
+        seg1_sum = np.sum(seg1_onehot)
+        seg2_sum = np.sum(seg2_onehot)
+
+        # Compute the Dice score for the current label
+        dice[label] = (2 * intersection) / (seg1_sum + seg2_sum)
+    
+    return dice

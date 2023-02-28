@@ -33,7 +33,13 @@ def evaluate(args,
     model.eval()
 
     # evaluate dice for all subjects in ttv split of this subdataset
-    dice_scores = utils_data.evaluate(args.dataset, subdataset, args.cv_fold_num, ttv, model, device)
+    dice_scores = utils_data.evaluate(args.dataset,
+                                      subdataset,
+                                      args.cv_fold_num,
+                                      ttv,
+                                      model,
+                                      device,
+                                      args.num_labels)
 
     # set model back to training mode
     model.train()
@@ -87,7 +93,7 @@ def get_losses(preds,
                mask = None,
                loss_type = 'ce',
                margin = 0.1):
-    
+        
     if loss_type == 'ce':
         loss_pc = - targets * F.log_softmax(preds, dim=1) # pixel wise cross entropy
     elif loss_type == 'l2':
@@ -105,6 +111,27 @@ def get_losses(preds,
     
     return loss_pc, loss_p, loss
     
+	
+# ==========================================
+# the weights here are for relative weighting of pixels within the consistency loss only
+# the importance of consistency loss vs supervised loss is set by the args.l2 parameter when the losses are combined
+# ==========================================
+def get_lambda_maps(labels,
+                    weigh_per_distance, # whether to make weight vary as per distance from the boundary or not
+                    lmax = 1.0, # max value (applied to pixels on the tissue boundary)
+                    R = 10.0, # margin around the boundary where the lambda values vary
+                    drop_factor = 100.0, # min value (applied to pixels farther away than the margin) = lmax / drop_factor
+                    alp = 1.0): # rate of decrease of lambda away from the boundary
+    
+    weights = lmax * np.ones_like(labels, dtype = np.float32)
+    
+    if weigh_per_distance == 1:
+        for idx in range(labels.shape[0]):
+            sdt = utils_data.compute_sdt(labels[idx, 0, :, :])
+            weights[idx, 0, :, :] = utils_data.compute_lambda_map(sdt, R, lmax / drop_factor, lmax, alp)
+        
+    return weights
+
 # ==========================================
 # ==========================================
 if __name__ == "__main__":
@@ -121,11 +148,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='prostate') # placenta / prostate / ms
-    parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
-    parser.add_argument('--cv_fold_num', default=3, type=int)
-    parser.add_argument('--num_labels', default=2, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v8/')
+    parser.add_argument('--dataset', default='acdc') # placenta / prostate / ms
+    parser.add_argument('--sub_dataset', default='acdc') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
+    parser.add_argument('--cv_fold_num', default=1, type=int)
+    parser.add_argument('--num_labels', default=4, type=int)
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v9/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
@@ -136,14 +163,15 @@ if __name__ == "__main__":
     parser.add_argument('--save_frequency', default=10000, type=int)
 
     # no tricks: (100), data aug (010), data aug + consistency (011 / 012)
-    parser.add_argument('--l0', default=1, type=float) # 0 / 1
-    parser.add_argument('--l1', default=0, type=float) # 0 / 1
-    parser.add_argument('--l2', default=0, type=float) # 0 / 1 
+    parser.add_argument('--l0', default=1.0, type=float) # 0 / 1
+    parser.add_argument('--l1', default=0.0, type=float) # 0 / 1
+    parser.add_argument('--l2', default=0.0, type=float) # 0 / 1 
     parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
-    parser.add_argument('--l2_loss', default='ce') # 'ce' / 'l2' / 'l2_margin' / 'l2_all' / 'l2_all_margin'
-    parser.add_argument('--l2_loss_margin', default=0.1, type=float) # 0.1
+    parser.add_argument('--l2_loss', default='l2') # 'ce' / 'l2' / 'l2_margin' / 'l2_all' / 'l2_all_margin'
+    parser.add_argument('--l2_loss_margin', default=0.0, type=float) # 0.1
+    parser.add_argument('--weigh_lambda_con', default=0, type=int) # 0 / 1
     parser.add_argument('--alpha_layer', default=1.0, type=float) # 1.0
-    parser.add_argument('--temp', default=1, type=float) # 1 / 2
+    parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
         
     parser.add_argument('--run_number', default=1, type=int)
@@ -155,8 +183,8 @@ if __name__ == "__main__":
     # set random seed
     # ===================================
     logging.info('Setting random seeds for numpy and torch')
-    np.random.seed(args.run_number)
-    torch.manual_seed(args.run_number)
+    np.random.seed(args.run_number * args.cv_fold_num)
+    torch.manual_seed(args.run_number * args.cv_fold_num)
 
     # ===================================
     # select device - gpu / cpu
@@ -185,7 +213,11 @@ if __name__ == "__main__":
     # ===================================
     # define model
     # ===================================
-    model = models.UNet2d(in_channels = 1, num_labels = args.num_labels, squeeze = False)
+    model = models.UNet2d(in_channels = 1,
+                          num_labels = args.num_labels,
+                          squeeze = False,
+                          output_layer_type = 2,
+                          device = device)
     model = model.to(device)
 
     # ===================================
@@ -292,25 +324,35 @@ if __name__ == "__main__":
         # =======================
         # E consistency losses / soft label losses on (1) transformed data 1, (2) transformed data 2 (using the other's preds as soft targets)
         # =======================
+
+        # =======================
+        # determine per-pixel loss weighting, if desired
+        # =======================
+        mask_con = torch.mul(mask1, mask2)
+        weight_lambda = get_lambda_maps(labels0_cpu, args.weigh_lambda_con)
+        weight_lambda = utils_data.torch_and_send_to_device(weight_lambda, device)
+        weight_lambda = weight_lambda.repeat(1, mask_con.shape[1], 1, 1)
+        mask_con = torch.mul(mask_con, weight_lambda)
+
         if args.l2_loss == 'ce':
             con_loss1_pc, con_loss1_p, con_loss1 = get_losses(preds = logits1_inv,
                                                               targets = F.softmax(logits2_inv / args.temp, dim = 1),
-                                                              mask = torch.mul(mask1, mask2))
+                                                              mask = mask_con)
         
             con_loss2_pc, con_loss2_p, con_loss2 = get_losses(preds = logits2_inv,
                                                               targets = F.softmax(logits1_inv / args.temp, dim = 1),
-                                                              mask = torch.mul(mask1, mask2))
+                                                              mask = mask_con)
             
         elif args.l2_loss in ['l2', 'l2_margin']:
             con_loss1_pc, con_loss1_p, con_loss1 = get_losses(preds = logits1_inv,
                                                               targets = logits2_inv,
-                                                              mask = torch.mul(mask1, mask2),
+                                                              mask = mask_con,
                                                               loss_type = args.l2_loss,
                                                               margin = args.l2_loss_margin)
         
             con_loss2_pc, con_loss2_p, con_loss2 = get_losses(preds = logits2_inv,
                                                               targets = logits1_inv,
-                                                              mask = torch.mul(mask1, mask2),
+                                                              mask = mask_con,
                                                               loss_type = args.l2_loss,
                                                               margin = args.l2_loss_margin)
 
@@ -343,15 +385,6 @@ if __name__ == "__main__":
                 # define weight for this layer
                 weight_layer_l.append((((l+1) / num_layers) ** args.alpha_layer))                
                 writer.add_scalar("Weights/cons1_L"+str(l+1), weight_layer_l[l], iteration+1)
-
-            # # normalize weights for each layer by total weight for consistency loss
-            # total_weight = sum(weight_layer_l)
-            # for l in range(num_layers):    
-            #     weight_layer_l[l] = weight_layer_l[l] / total_weight
-            #     # not normalizing the weights may be the right thing to do
-            #     # that would allow us to compare the effect of adding constraints in previous layers by reducing alpha values
-            #     # currently reducing alpha values reduces constraints in later layers in order to increase constraints in previous layers
-            #     writer.add_scalar("Weights/cons1_L"+str(l+1), weight_layer_l[l], iteration+1)
 
             # total consistency loss
             con_loss1 = sum(i[0] * i[1] for i in zip(weight_layer_l, cons_loss1_layer_l))
@@ -407,6 +440,8 @@ if __name__ == "__main__":
             writer.add_scalar("Dice_EMA/Test", np.mean(dice_score_ema_ts), iteration+1)
             writer.add_scalar("Dice_EMA/Train", np.mean(dice_score_ema_tr), iteration+1)
             writer.add_scalar("Dice_EMA/Val", np.mean(dice_score_ema_vl), iteration+1)
+
+            # writer.add_figure('Training', utils_vis.show_images_labels_preds(inputs0_gpu, labels0_gpu, F.softmax(outputs0[-1], dims=1)), global_step = iteration+1)
 
             # ===================================
             # save best model so far, according to performance on validation set

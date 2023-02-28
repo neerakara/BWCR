@@ -384,4 +384,4 @@ class OutConvBlock2d_Nmimus1(nn.Module):
 
     def forward(self, x):
         x = self.conv(x)
-        return torch.cat((torch.zeros(x.shape, dtype=x.dtype).to(self.device), x), dim=1) # logits of class 0 fixed to 0
+        return torch.cat((torch.zeros([x.shape[0], 1, x.shape[2], x.shape[3]], dtype=x.dtype).to(self.device), x), dim=1) # logits of class 0 fixed to 0

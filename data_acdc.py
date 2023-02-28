@@ -304,14 +304,29 @@ def load_dataset(data_orig_path,
 # ==========================================================
 # loads image and label without any preprocessing
 # ==========================================================
-def load_without_preproc(data_proc_path,
+def load_without_preproc(data_path,
                          subject_name):
 
-    nifti_img_path = data_proc_path + 'NCI_nii/' + subject_name
-    image = utils_data.load_nii(img_path = nifti_img_path + '_img.nii.gz')[0]
-    label = utils_data.load_nii(img_path = nifti_img_path + '_lbl.nii.gz')[0]
-                         
-    return image, label
+    sub_name = subject_name[:-2]
+    subject_folder = data_path + sub_name + '/'
+
+    for _, _, fileList in os.walk(subject_folder):    
+        
+        for filename in fileList:
+        
+            if len(filename) == 25:
+        
+                if filename == sub_name + '_frame01.nii.gz':
+                    cardiac_stage = 'ED'
+                else:
+                    cardiac_stage = 'ES'
+                    
+                if cardiac_stage == subject_name[-2:]:
+                    image = utils_data.load_nii(img_path = subject_folder + filename)[0]
+                    label = utils_data.load_nii(img_path = subject_folder + '/' + filename.split('.')[0] + '_gt.nii.gz')[0]
+                    
+                    return image, label
+
 
 # ==========================================================
 # ==========================================================

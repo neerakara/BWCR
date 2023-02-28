@@ -46,7 +46,7 @@ def load_data(dataset,
                                                       size = (256, 256),
                                                       target_resolution = (0.625, 0.625))
 
-    elif args.dataset == 'ms':
+    elif dataset == 'ms':
         data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/ms_lesions/shifts_ms/' # orig data is here
         data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/ms/' # save processed data here
         data = data_ms.load_dataset(data_orig_path,
@@ -70,19 +70,32 @@ def load_data(dataset,
 
 # ==========================================
 # ==========================================
-def load_without_preproc(sub_dataset,
-                         subject_name):
+def load_without_preproc(dataset,
+                         sub_dataset,
+                         subject_name,
+                         ttv):
 
-    data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/' # orig data is here
-    data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
-    # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
-    if sub_dataset in ['RUNMC', 'BMC']:
-        image, label = data_prostate_nci.load_without_preproc(data_proc_path,
-                                                              subject_name)
-
-    elif sub_dataset in ['UCL', 'HK', 'BIDMC']:
-        image, label = data_prostate_promise.load_without_preproc(data_proc_path,
+    if dataset == 'prostate':
+        data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/' # orig data is here
+        data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
+        # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
+        if sub_dataset in ['RUNMC', 'BMC']:
+            image, label = data_prostate_nci.load_without_preproc(data_proc_path,
                                                                   subject_name)
+
+        elif sub_dataset in ['UCL', 'HK', 'BIDMC']:
+            image, label = data_prostate_promise.load_without_preproc(data_proc_path,
+                                                                      subject_name)
+            
+    elif dataset == 'acdc':
+        if ttv == 'test':
+            data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/acdc/testing/' # orig data is here
+        else:
+            data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/acdc/training/'
+
+        image, label = data_acdc.load_without_preproc(data_orig_path,
+                                                      subject_name)
+        
 
     return image, label
 

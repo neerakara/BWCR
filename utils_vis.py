@@ -195,6 +195,29 @@ def save_results(images,
 
 # ==========================================================
 # ==========================================================
+def show_images_labels_preds(images,
+                             labels,
+                             preds):
+    
+    fig = plt.figure(figsize=(18, 24))
+    
+    tmp_images = np.copy(images.cpu().numpy())
+    tmp_labels = np.copy(labels.cpu().numpy())
+    tmp_preds = np.copy(preds.detach().cpu().numpy())
+
+    # show 4 examples per batch
+    for batch_index in range(4):
+        ax = fig.add_subplot(4, 3, 3*batch_index + 1, xticks=[], yticks=[])
+        plt.imshow(normalize_img_for_vis(tmp_images[batch_index,0,:,:]), cmap = 'gray')
+        ax = fig.add_subplot(4, 3, 3*batch_index + 2, xticks=[], yticks=[])
+        plt.imshow(normalize_img_for_vis(tmp_labels[batch_index,1,:,:]), cmap = 'gray')
+        ax = fig.add_subplot(4, 3, 3*batch_index + 3, xticks=[], yticks=[])
+        plt.imshow(normalize_img_for_vis(tmp_preds[batch_index,1,:,:]), cmap = 'gray')
+
+    return fig
+
+# ==========================================================
+# ==========================================================
 def show_images_labels_predictions(images,
                                    labels,
                                    soft_predictions):

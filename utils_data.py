@@ -531,14 +531,14 @@ def predict_segmentation(image,
                          nx,
                          ny):
 
-    preds_soft = predict_logits_and_probs(image, model, device)[-1][:, 1, :, :]
+    preds_soft = predict_logits_and_probs(image, model, device)[-1]
+
+    preds_hard = np.argmax(preds_soft, axis = 1).astype(np.float32)
     
-    preds_hard = (preds_soft > 0.5).astype(np.float32)
-    
-    preds_hard = utils_data.rescale_and_crop(preds_hard,
-                                             scale = (0.625 / px, 0.625 / py),
-                                             size = (nx, ny),
-                                             order = 0).astype(np.uint8)
+    preds_hard = rescale_and_crop(preds_hard,
+                                  scale = (0.625 / px, 0.625 / py),
+                                  size = (nx, ny),
+                                  order = 0).astype(np.uint8)
     
     preds_hard = np.swapaxes(np.swapaxes(preds_hard, 0, 1), 1, 2)
 
@@ -546,12 +546,18 @@ def predict_segmentation(image,
 
 # ======================================================
 # ======================================================
-def get_gt_label(subdataset,
-                 subname):
+def get_gt_label(dataset,
+                 subdataset,
+                 subname,
+                 ttv):
     
-    _, label = data_loader.load_without_preproc(subdataset, subname)
+    _, label = data_loader.load_without_preproc(dataset,
+                                                subdataset,
+                                                subname,
+                                                ttv)
     
-    label[label!=0] = 1
+    if dataset == 'prostate':
+        label[label!=0] = 1
     
     if subdataset in ['UCL', 'HK', 'BIDMC']:
         label = np.swapaxes(np.swapaxes(label, 0, 1), 1, 2)
@@ -578,9 +584,14 @@ def evaluate(dataset,
              cv_fold_num,
              ttv,
              model,
-             device):
+             device,
+             num_labels = 2,
+             save_vis = False):
 
-    data = data_loader.load_data(dataset, subdataset, cv_fold_num, ttv)
+    data = data_loader.load_data(dataset,
+                                 subdataset,
+                                 cv_fold_num,
+                                 ttv)
     
     dice_scores = []
     
@@ -601,10 +612,16 @@ def evaluate(dataset,
                                         data["ny"][sub])
 
             # read original label (without preprocessing)
-            label = get_gt_label(subdataset, data["subject_names"][sub].decode('utf-8'))
+            label = get_gt_label(dataset, 
+                                 subdataset,
+                                 data["subject_names"][sub].decode('utf-8'),
+                                 ttv)
             
             # compute dice
-            dice_scores.append(utils_generic.dice(im1 = pred, im2 = label))
+            # dice_scores.append(utils_generic.dice(im1 = pred, im2 = label))
+            dice_scores.append(utils_generic.dice_score(pred,
+                                                        label,
+                                                        num_labels))
 
     return np.array(dice_scores)
 
