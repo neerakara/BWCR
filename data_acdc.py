@@ -47,17 +47,28 @@ def get_train_test_val_split_ids(cv_fold_num):
     train_test_val_split_ids = {}
     train_test_val_split_ids['test'] = np.arange(0, 50, 1).tolist()
 
-    # num_train_label = 5 | num_val_label = 5 |  num_val_unlabel = 90
-    # ran "np.random.randint(0, 100, 10).tolist()" thrice and fixed values to avoid confusion when running again
+    # cv 1/2/3: num_train_label = 5 | num_val_label = 5 |  num_val_unlabel = 90
+    # cv 10/20/30: num_train_label = 10 | num_val_label = 5 |  num_val_unlabel = 85
+    # ran "np.random.randint(0, 100, num_train_label + num_val_label).tolist()" thrice and fixed values to avoid confusion when running again
     if cv_fold_num == 1:
         idx_train_val = [39, 26, 88, 72, 4, 8, 73, 19, 53, 40]
     elif cv_fold_num == 2:
         idx_train_val = [65, 22, 53, 0, 77, 92, 97, 38, 40, 51]
     elif cv_fold_num == 3:
         idx_train_val = [84, 3, 59, 21, 17, 57, 20, 77, 60, 91]
+    elif cv_fold_num == 10:
+        idx_train_val = [2, 37, 59, 28, 94, 19, 85, 36, 60, 30, 4, 95, 76, 23, 42]
+    elif cv_fold_num == 20:
+        idx_train_val = [90, 12, 70, 38, 6, 69, 32, 48, 64, 18, 93, 40, 10, 50, 67]
+    elif cv_fold_num == 30:
+        idx_train_val = [23, 59, 60, 37, 86, 57, 37, 28, 27, 98, 89, 46, 28, 14, 35]
 
-    train_test_val_split_ids['train'] = idx_train_val[:5]
-    train_test_val_split_ids['validation'] = idx_train_val[5:]
+    if cv_fold_num in [1, 2, 3]:
+        train_test_val_split_ids['train'] = idx_train_val[:5]
+        train_test_val_split_ids['validation'] = idx_train_val[5:]
+    elif cv_fold_num in [10, 20, 30]:
+        train_test_val_split_ids['train'] = idx_train_val[:10]
+        train_test_val_split_ids['validation'] = idx_train_val[10:]
 
     idx_total = np.arange(0, 100, 1).tolist()
     train_test_val_split_ids['train_unsupervised'] = [x for x in idx_total if x not in idx_train_val]
@@ -274,7 +285,7 @@ def load_dataset(data_orig_path,
                  cv_fold,
                  size,
                  target_resolution,
-                 bias_correct=True,
+                 bias_correct=False,
                  force_overwrite=False):
 
     size_str = '_size_' + '_'.join([str(i) for i in size])
@@ -353,7 +364,7 @@ if __name__ == '__main__':
     train_test_val = 'validation'
     size = (192, 192)
     target_res = (1.33, 1.33)
-    bias_correct = True
+    bias_correct = False
 
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/acdc/'
     data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/acdc/'

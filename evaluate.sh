@@ -7,11 +7,11 @@
 
 ## SLURM Variables:
 #SBATCH  --output=/data/scratch/nkarani/logs/%j.out
-#SBATCH  --partition=gpu
-#SBATCH  --exclude=anise,curcum,sumac,fennel,rosemary,urfa-biber,marjoram,mint,peppermint,sassafras
+#SBATCH  --partition=titan,2080ti,gpu
+#SBATCH  --exclude=anise,curcum,sumac,fennel,urfa-biber,rosemary,mace,malt
 #SBATCH  --gres=gpu:1
 #SBATCH  --cpus-per-task=8
-#SBATCH  --mem=16G
+#SBATCH  --mem=12G
 #SBATCH  --time=02:00:00
 #SBATCH  --priority='TOP'
 
@@ -19,17 +19,17 @@
 source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
 ## EXECUTION OF PYTHON CODE:
-python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate_multiple_models.py \
---cv_fold_num $1 \
---run_num $2 \
---dataset $3 \
---test_sub_dataset $4 \
---model_has_heads $5 \
---method_invariance $6 \
---lambda_dataaug $7 \
---lambda_consis $8 \
---consis_loss $9 \
---alpha_layer ${10}
+python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
+--dataset $1 \
+--sub_dataset $2 \
+--cv_fold_num $3 \
+--run_number $4 \
+--data_aug_prob $5 \
+--l0 $6 \
+--l1 $7 \
+--l2 $8 \
+--l1_loss $9 \
+--l2_loss ${10}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

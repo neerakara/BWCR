@@ -118,17 +118,37 @@ def get_losses(preds,
 # ==========================================
 def get_lambda_maps(labels,
                     weigh_per_distance, # whether to make weight vary as per distance from the boundary or not
+                    num_labels,
                     lmax = 1.0, # max value (applied to pixels on the tissue boundary)
                     R = 10.0, # margin around the boundary where the lambda values vary
                     drop_factor = 100.0, # min value (applied to pixels farther away than the margin) = lmax / drop_factor
                     alp = 1.0): # rate of decrease of lambda away from the boundary
-    
+                     
     weights = lmax * np.ones_like(labels, dtype = np.float32)
     
     if weigh_per_distance == 1:
+        
         for idx in range(labels.shape[0]):
-            sdt = utils_data.compute_sdt(labels[idx, 0, :, :])
-            weights[idx, 0, :, :] = utils_data.compute_lambda_map(sdt, R, lmax / drop_factor, lmax, alp)
+
+            if num_labels == 2: # binary segmentations
+                sdt = utils_data.compute_sdt(labels[idx, 0, :, :])
+                weights[idx, 0, :, :] = utils_data.compute_lambda_map(sdt, R, lmax / drop_factor, lmax, alp)
+
+            else: # multi-label segmentations
+                label = labels[idx, 0, :, :]
+                lamdas = []
+                
+                for c in range(1, num_labels):
+                    
+                    label_tmp = np.copy(label)
+                    label_tmp[label_tmp != c] = 0
+                    label_tmp[label_tmp == c] = 1
+                    
+                    sdt = utils_data.compute_sdt(label_tmp)
+                    lam = utils_data.compute_lambda_map(sdt, R, lmax / drop_factor, lmax, alp)
+                    lamdas.append(lam)  
+
+                weights[idx, 0, :, :] = np.max(np.array(lamdas), axis=0)
         
     return weights
 
@@ -152,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='acdc') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=2, type=int)
     parser.add_argument('--num_labels', default=4, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v9/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v10/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
@@ -329,7 +349,7 @@ if __name__ == "__main__":
         # determine per-pixel loss weighting, if desired
         # =======================
         mask_con = torch.mul(mask1, mask2)
-        weight_lambda = get_lambda_maps(labels0_cpu, args.weigh_lambda_con)
+        weight_lambda = get_lambda_maps(labels0_cpu, args.weigh_lambda_con, args.num_labels)
         weight_lambda = utils_data.torch_and_send_to_device(weight_lambda, device)
         weight_lambda = weight_lambda.repeat(1, mask_con.shape[1], 1, 1)
         mask_con = torch.mul(mask_con, weight_lambda)
