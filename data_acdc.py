@@ -188,7 +188,7 @@ def prepare_data(input_folder,
                             img = utils_data.load_nii(img_path = img_path_n4)[0]
                         else:
                             logging.info('correcting bias field... ')
-                            utils_data.correct_bias_field(img_path, img_path_n4)
+                            utils_data.correct_bias_field(img_path, img_path_n4, 'n4_exec')
                             img = utils_data.load_nii(img_path = img_path_n4)[0]
                     else:
                         img = utils_data.load_nii(img_path = img_path)[0]
@@ -274,7 +274,7 @@ def load_dataset(data_orig_path,
                  cv_fold,
                  size,
                  target_resolution,
-                 bias_correct=False,
+                 bias_correct=True,
                  force_overwrite=False):
 
     size_str = '_size_' + '_'.join([str(i) for i in size])
@@ -297,7 +297,7 @@ def load_dataset(data_orig_path,
                      target_resolution,
                      bias_correct)
     else:
-        logging.info('Already preprocessed this configuration. Loading now!')
+        logging.info('Already preprocessed this configuration. Loading ' + data_file_path + ' now!')
 
     return h5py.File(data_file_path, 'r')
 
@@ -349,11 +349,11 @@ if __name__ == '__main__':
     # setup logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
-    cv_fold = 1
-    train_test_val = 'train'
+    cv_fold = 3
+    train_test_val = 'validation'
     size = (192, 192)
     target_res = (1.33, 1.33)
-    bias_correct = False
+    bias_correct = True
 
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/acdc/'
     data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/acdc/'

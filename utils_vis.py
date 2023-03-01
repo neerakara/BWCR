@@ -196,8 +196,8 @@ def save_results(images,
 # ==========================================================
 # ==========================================================
 def show_images_labels_preds(images,
-                             labels,
-                             preds):
+                             labels, # hard labels (not 1 hot)
+                             preds): # soft predictions
     
     fig = plt.figure(figsize=(18, 24))
     
@@ -205,14 +205,18 @@ def show_images_labels_preds(images,
     tmp_labels = np.copy(labels.cpu().numpy())
     tmp_preds = np.copy(preds.detach().cpu().numpy())
 
+    tmp_images = np.squeeze(tmp_images)
+    tmp_labels = np.squeeze(tmp_labels)
+    tmp_preds = np.argmax(tmp_preds, axis = 1)
+
     # show 4 examples per batch
     for batch_index in range(4):
         ax = fig.add_subplot(4, 3, 3*batch_index + 1, xticks=[], yticks=[])
-        plt.imshow(normalize_img_for_vis(tmp_images[batch_index,0,:,:]), cmap = 'gray')
+        plt.imshow(normalize_img_for_vis(tmp_images[batch_index,:,:]), cmap = 'gray')
         ax = fig.add_subplot(4, 3, 3*batch_index + 2, xticks=[], yticks=[])
-        plt.imshow(normalize_img_for_vis(tmp_labels[batch_index,1,:,:]), cmap = 'gray')
+        plt.imshow(normalize_img_for_vis(tmp_labels[batch_index,:,:]), cmap = 'gray')
         ax = fig.add_subplot(4, 3, 3*batch_index + 3, xticks=[], yticks=[])
-        plt.imshow(normalize_img_for_vis(tmp_preds[batch_index,1,:,:]), cmap = 'gray')
+        plt.imshow(normalize_img_for_vis(tmp_preds[batch_index,:,:]), cmap = 'gray')
 
     return fig
 

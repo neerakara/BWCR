@@ -105,6 +105,7 @@ def compute_calibration_error(confs,
 
     return ce
 
+# https://github.com/mobarakol/SVLS/blob/main/calibration_metrics.py
 def ece_eval(preds,
              targets,
              n_bins=10,

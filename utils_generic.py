@@ -173,4 +173,4 @@ def dice_score(seg1, seg2, num_labels):
         # Compute the Dice score for the current label
         dice[label] = (2 * intersection) / (seg1_sum + seg2_sum)
     
-    return dice
+    return dice[1:] # ignore background dice

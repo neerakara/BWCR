@@ -3,12 +3,12 @@ anatomy='acdc'
 daprob=0.5
 l0=0.0
 l1=1.0
-l2=1.0
+l2=0.1
 tem=1.0
-l1loss='ce'
+l1loss='dice'
 l2loss='l2'
 alpha=0.1
-runnum=1
+runnum=3
 
 for dataset in 'acdc'
 do

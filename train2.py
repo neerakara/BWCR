@@ -150,7 +150,7 @@ if __name__ == "__main__":
     
     parser.add_argument('--dataset', default='acdc') # placenta / prostate / ms
     parser.add_argument('--sub_dataset', default='acdc') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
-    parser.add_argument('--cv_fold_num', default=1, type=int)
+    parser.add_argument('--cv_fold_num', default=2, type=int)
     parser.add_argument('--num_labels', default=4, type=int)
     parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v9/')
     
@@ -301,9 +301,9 @@ if __name__ == "__main__":
         # D supervised losses on (1) original data, (2) transformed data 1 (in original coordinates), (3) transformed data 2
         # =======================
         if args.l1_loss == 'dice':
-            sup_loss0 = dice_loss_function(F.softmax(outputs0[-1], dims=1), make_1hot(labels0_gpu, args.num_labels))
-            sup_loss1 = dice_loss_function(F.softmax(logits1_inv, dims=1), make_1hot(labels1_inv, args.num_labels))
-            sup_loss2 = dice_loss_function(F.softmax(logits2_inv, dims=1), make_1hot(labels2_inv, args.num_labels))
+            sup_loss0 = dice_loss_function(F.softmax(outputs0[-1], dim = 1), make_1hot(labels0_gpu, args.num_labels))
+            sup_loss1 = dice_loss_function(F.softmax(logits1_inv, dim = 1), make_1hot(labels1_inv, args.num_labels))
+            sup_loss2 = dice_loss_function(F.softmax(logits2_inv, dim = 1), make_1hot(labels2_inv, args.num_labels))
 
             sup_loss0_p = labels0_gpu # irrelevant
             sup_loss1_p = labels1_inv # irrelevant
@@ -427,21 +427,11 @@ if __name__ == "__main__":
         # ===================================
         if (iteration % args.eval_frequency == 0):
 
-            dice_score_ts = evaluate(args, model, device, args.sub_dataset, 'test')
-            dice_score_tr = evaluate(args, model, device, args.sub_dataset, 'train')
             dice_score_vl = evaluate(args, model, device, args.sub_dataset, 'validation')
-            writer.add_scalar("Dice/Test", np.mean(dice_score_ts), iteration+1)
-            writer.add_scalar("Dice/Train", np.mean(dice_score_tr), iteration+1)
             writer.add_scalar("Dice/Val", np.mean(dice_score_vl), iteration+1)
 
-            dice_score_ema_ts = evaluate(args, model_ema, device, args.sub_dataset, 'test')
-            dice_score_ema_tr = evaluate(args, model_ema, device, args.sub_dataset, 'train')
             dice_score_ema_vl = evaluate(args, model_ema, device, args.sub_dataset, 'validation')
-            writer.add_scalar("Dice_EMA/Test", np.mean(dice_score_ema_ts), iteration+1)
-            writer.add_scalar("Dice_EMA/Train", np.mean(dice_score_ema_tr), iteration+1)
-            writer.add_scalar("Dice_EMA/Val", np.mean(dice_score_ema_vl), iteration+1)
-
-            # writer.add_figure('Training', utils_vis.show_images_labels_preds(inputs0_gpu, labels0_gpu, F.softmax(outputs0[-1], dims=1)), global_step = iteration+1)
+            writer.add_scalar("Dice_EMA/Val", np.mean(dice_score_ema_vl), iteration+1)            
 
             # ===================================
             # save best model so far, according to performance on validation set
@@ -460,6 +450,23 @@ if __name__ == "__main__":
                 torch.save({'state_dict': model_ema.state_dict(), 'optimizer': optimizer.state_dict()},
                            models_path + 'best_ema_val_iter' + str(iteration) + '.pt')
                 logging.info('Found new best dice on ema val set: ' + str(best_dice_score_ema_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
+
+        if (iteration % (50 * args.eval_frequency) == 0):
+            
+            writer.add_figure('Training', utils_vis.show_images_labels_preds(inputs0_gpu,
+                                                                             labels0_gpu,
+                                                                             F.softmax(outputs0[-1], dim = 1)),
+                                                                             global_step = iteration+1)
+            
+            dice_score_ts = evaluate(args, model, device, args.sub_dataset, 'test')
+            dice_score_tr = evaluate(args, model, device, args.sub_dataset, 'train')            
+            writer.add_scalar("Dice/Test", np.mean(dice_score_ts), iteration+1)
+            writer.add_scalar("Dice/Train", np.mean(dice_score_tr), iteration+1)
+            
+            dice_score_ema_ts = evaluate(args, model_ema, device, args.sub_dataset, 'test')
+            dice_score_ema_tr = evaluate(args, model_ema, device, args.sub_dataset, 'train')
+            writer.add_scalar("Dice_EMA/Test", np.mean(dice_score_ema_ts), iteration+1)
+            writer.add_scalar("Dice_EMA/Train", np.mean(dice_score_ema_tr), iteration+1)
 
         # ===================================
         # save models at some frequency irrespective of whether this is the best model or not

@@ -27,12 +27,11 @@ from medpy.metric.binary import hd95 as Hausdorff_Distance_95
 # ===================================================
 def compute_metrics(pred,
                     label,
+                    num_labels,
                     voxelspacing = 1.0):
-
-    scores = np.zeros(5, dtype = np.float32) 
     
     # dice    
-    d = utils_generic.dice(im1 = pred, im2 = label)
+    dice = utils_generic.dice_score(pred, label, num_labels) # fg dices
 
     # hd, hd95 and assd
     if np.sum(pred) > 0:
@@ -44,12 +43,7 @@ def compute_metrics(pred,
         hd95 = np.nan
         assd = np.nan
 
-    scores[0] = d    
-    scores[1] = hd
-    scores[2] = hd95
-    scores[3] = assd
-
-    return scores
+    return dice, hd, hd95, assd
 
 # ===================================================
 # function to write obtained results to file
@@ -58,7 +52,7 @@ def write_results_to_file(results_path,
                           test_subdataset,  
                           subject_metrics,
                           subject_names_ts,
-                          num_decimals = 4,
+                          num_decimals = 3,
                           metric = 'dice'):
     
     with open(results_path + '/' + test_subdataset + '_' + metric + '.csv', mode='w') as csv_file:
@@ -69,14 +63,32 @@ def write_results_to_file(results_path,
         csv_file.writerow(['--------', '--------'])
         
         # for each subject
-        for s in range(len(subject_names_ts)):
-            csv_file.writerow([subject_names_ts[s], np.round(subject_metrics[s], num_decimals)])
+        for s in range(subject_metrics.shape[0]):
+
+            if len(subject_metrics.shape) == 2: # class-wise metrics
+                row = [subject_names_ts[s]]
+                for c in range(subject_metrics.shape[-1]):
+                    row.append(np.round(subject_metrics[s, c], num_decimals))
+            
+            else:
+                row = [subject_names_ts[s], np.round(subject_metrics[s], num_decimals)]
+            
+            csv_file.writerow(row)
+
         csv_file.writerow(['--------', '--------'])
         
-        # statistics
-        subject_metrics_array = np.array(subject_metrics)
-        csv_file.writerow(['Mean', np.round(np.mean(subject_metrics_array), num_decimals)])
-        csv_file.writerow(['Standard deviation', np.round(np.std(subject_metrics_array), num_decimals)])
+        # statistics over all subjects for each class
+        if len(subject_metrics.shape) == 2: # class-wise metrics
+            for c in range(subject_metrics.shape[-1]):
+                row = ['class' + str(c+1)]
+                row.append(': mean ' + str(np.round(np.mean(subject_metrics[:,c]), num_decimals)))
+                row.append(', stdev ' + str(np.round(np.std(subject_metrics[:,c]), num_decimals)))
+                csv_file.writerow(row)
+            csv_file.writerow(['--------', '--------'])
+
+        # statistics over all subjects over all classes
+        csv_file.writerow(['Mean', np.round(np.mean(subject_metrics), num_decimals)])
+        csv_file.writerow(['Standard deviation', np.round(np.std(subject_metrics), num_decimals)])
         csv_file.writerow(['--------', '--------'])
 
     return 0
@@ -98,13 +110,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description = 'train segmentation model')
     
-    parser.add_argument('--dataset', default='prostate') # placenta / prostate
-    parser.add_argument('--sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
-    parser.add_argument('--test_sub_dataset', default='RUNMC') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
+    parser.add_argument('--dataset', default='acdc') # placenta / prostate / acdc
+    parser.add_argument('--sub_dataset', default='acdc') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / acdc
+    parser.add_argument('--test_sub_dataset', default='acdc') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL
     parser.add_argument('--cv_fold_num', default=1, type=int)
-    parser.add_argument('--num_labels', default=2, type=int)
+    parser.add_argument('--num_labels', default=4, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v8/')
+    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v9/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
@@ -114,18 +126,27 @@ if __name__ == "__main__":
     # no tricks: (100), data aug (010), data aug + consistency (011 / 012)
     parser.add_argument('--l0', default=0.0, type=float) # 0 / 1
     parser.add_argument('--l1', default=1.0, type=float) # 0 / 1
-    parser.add_argument('--l2', default=1.0, type=float) # 0 / 1 
+    parser.add_argument('--l2', default=0.0, type=float) # 0 / 1 
     parser.add_argument('--l1_loss', default='ce') # 'ce' / 'dice'
-    parser.add_argument('--l2_loss', default='l2_all') # 'ce' / 'l2' / 'l2_margin' 
-    parser.add_argument('--l2_loss_margin', default=0.1, type=float) # 0.1
+    parser.add_argument('--l2_loss', default='l2') # 'ce' / 'l2' / 'l2_margin' 
+    parser.add_argument('--l2_loss_margin', default=0.0, type=float) # 0.1
+    parser.add_argument('--weigh_lambda_con', default=0, type=int) # 0 / 1
     parser.add_argument('--alpha_layer', default=10.0, type=float) # 1.0
     parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
     
-    parser.add_argument('--run_number', default=1, type=int)
+    parser.add_argument('--run_number', default=2, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
     
     args = parser.parse_args()
+
+    # ===================================
+    # TARGET RESOLUTIONS
+    # ===================================
+    if args.dataset == 'prostate':
+        target_res = [0.625, 0.625]
+    elif args.dataset == 'acdc':
+        target_res = [1.33, 1.33]
 
     # ===================================
     # set random seed
@@ -154,7 +175,11 @@ if __name__ == "__main__":
     # define model
     # ===================================
     logging.info('Defining segmentation model')
-    model = models.UNet2d(in_channels = 1, num_labels = args.num_labels, squeeze = False)
+    model = models.UNet2d(in_channels = 1,
+                          num_labels = args.num_labels,
+                          squeeze = False,
+                          output_layer_type = 2,
+                          device = device)
     model = model.to(device)
 
     # ===================================
@@ -175,7 +200,10 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Evaluation experiment: ' + logging_dir)
     logging.info('Reading test data')
-    data_test = data_loader.load_data(args.dataset, args.test_sub_dataset, args.cv_fold_num, 'test')
+    data_test = data_loader.load_data(args.dataset,
+                                      args.test_sub_dataset,
+                                      args.cv_fold_num,
+                                      'test')
     images_ts = data_test["images"]
     labels_ts = data_test["labels"]
     depths_ts = data_test["depths"]
@@ -201,26 +229,30 @@ if __name__ == "__main__":
         # get subject's image and labels
         subject_name = subject_names_ts[sub]
         logging.info(subject_name)
-        subject_image = images_ts[:,:,int(np.sum(depths_ts[:sub])):int(np.sum(depths_ts[:sub+1]))]
-        subject_label = labels_ts[:,:,int(np.sum(depths_ts[:sub])):int(np.sum(depths_ts[:sub+1]))]
+        subject_image = images_ts[:, :, int(np.sum(depths_ts[:sub])):int(np.sum(depths_ts[:sub+1]))]
+        subject_label = labels_ts[:, :, int(np.sum(depths_ts[:sub])):int(np.sum(depths_ts[:sub+1]))]
 
         # make prediction
-        logits, probs = utils_data.predict_logits_and_probs(subject_image, model, device)
-        soft_prediction = probs[:,1,:,:]
+        logits, soft_prediction = utils_data.predict_logits_and_probs(subject_image, model, device)
 
         # threshold probability
-        hard_prediction = (soft_prediction > 0.5).astype(np.float32)
+        hard_prediction = np.argmax(soft_prediction, axis = 1).astype(np.float32)
 
         # ===================
         # resolution scaling is needed for prostate datasets
         # ===================
-        if args.dataset == 'prostate':
+        if args.dataset in ['prostate', 'acdc']:
 
             # ===================
             # read original image and label (without preprocessing)
             # ===================
-            image_orig, label_orig = data_loader.load_without_preproc(args.test_sub_dataset, subject_name.decode('utf-8'))
-            label_orig[label_orig!=0] = 1
+            image_orig, label_orig = data_loader.load_without_preproc(args.dataset,
+                                                                      args.test_sub_dataset,
+                                                                      subject_name.decode('utf-8'),
+                                                                      'test')
+            
+            if args.num_labels == 2:
+                label_orig[label_orig != 0] = 1
 
             if args.test_sub_dataset in ['UCL', 'HK', 'BIDMC']:
                 label_orig = np.swapaxes(np.swapaxes(label_orig, 0, 1), 1, 2)
@@ -230,19 +262,27 @@ if __name__ == "__main__":
             # convert the predicitons back to original resolution
             # ===================
             hard_prediction_orig_res_and_size = utils_data.rescale_and_crop(hard_prediction,
-                                                                            scale = (0.625 / data_test["px"][sub], 0.625 / data_test["py"][sub]),
+                                                                            scale = (target_res[0] / data_test["px"][sub],
+                                                                                     target_res[1] / data_test["py"][sub]),
                                                                             size = (data_test["nx"][sub], data_test["ny"][sub]),
                                                                             order = 0).astype(np.uint8)
             
-            probs_fg_orig_res_and_size = utils_data.rescale_and_crop(probs[:,1,:,:],
-                                                                     scale = (0.625 / data_test["px"][sub], 0.625 / data_test["py"][sub]),
-                                                                     size = (data_test["nx"][sub], data_test["ny"][sub]),
-                                                                     order = 1)
-            probs_bg_orig_res_and_size = 1 - probs_fg_orig_res_and_size
-            probs_orig_res_and_size = np.stack((probs_bg_orig_res_and_size, probs_fg_orig_res_and_size), axis = 1)
+            compute_calibration_errors = True
+            if compute_calibration_errors == True:
+                # rescaling probs has the possibility of changing their sum across classes to not be 1
+                # rescale logits instead
+                # either way, however, rescaling will change the calibration to some extent
+                # to capture the differences between calibrations of different models, let's compute calibration errors without rescaling to the original resolution
 
-            # compute calibration error
-            subject_eces.append(utils_losses.ece_eval(probs_orig_res_and_size, np.swapaxes(np.swapaxes(label_orig, 1, 2), 0, 1), n_bins=15)[0])
+                # compute calibration error
+                preds = np.swapaxes(np.swapaxes(soft_prediction, 1, 2), 2, 3)
+                preds = np.reshape(preds, [-1, args.num_labels])
+
+                label = np.swapaxes(np.swapaxes(subject_label, 1, 2), 0, 1)
+                label = np.reshape(label, [-1, 1])
+                label = np.squeeze(label)
+                
+                subject_eces.append(utils_losses.ece_eval(preds, label, n_bins=15)[0])
 
         elif args.dataset in ['placenta', 'ms']:
             hard_prediction_orig_res_and_size = hard_prediction
@@ -261,36 +301,52 @@ if __name__ == "__main__":
         # ===================
         # visualize results
         # ===================
-        utils_vis.save_results(image_orig,
-                               label_orig,
-                               hard_prediction_orig_res_and_size,
-                               results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
+        save_vis = False
+        if save_vis == True:
+            utils_vis.save_results(image_orig,
+                                   label_orig,
+                                   hard_prediction_orig_res_and_size,
+                                   results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
 
         # ===================
         # compute dice
         # ===================
-        subject_dices.append(compute_metrics(pred = hard_prediction_orig_res_and_size, label = label_orig)[0])
+        subject_dices.append(compute_metrics(pred = hard_prediction_orig_res_and_size,
+                                             label = label_orig,
+                                             num_labels = args.num_labels)[0])
 
-        # ===================
-        # collect 2d slices with largest foreground
-        # ===================
-        idx = np.argmax(np.sum(subject_label, axis=(0,1)))
-        images_all[sub, :, :] = subject_image[:, :, idx]
-        labels_all[sub, :, :] = subject_label[:, :, idx]
-        logits0_all[sub, :, :] = logits[idx, 0, :, :]
-        logits1_all[sub, :, :] = logits[idx, 1, :, :]
-        prob_fg_all[sub, :, :] = soft_prediction[idx, :, :]
+        if save_vis == True:
+            # ===================
+            # collect 2d slices with largest foreground
+            # ===================
+            idx = np.argmax(np.sum(subject_label, axis=(0,1)))
+            images_all[sub, :, :] = subject_image[:, :, idx]
+            labels_all[sub, :, :] = subject_label[:, :, idx]
+            logits0_all[sub, :, :] = logits[idx, 0, :, :]
+            logits1_all[sub, :, :] = logits[idx, 1, :, :]
+            prob_fg_all[sub, :, :] = soft_prediction[idx, :, :]
 
     # ===================
     # visualize results
     # ===================
-    utils_vis.save_all([images_all, labels_all, logits0_all, logits1_all, prob_fg_all],
-                        results_path + args.test_sub_dataset + '_all.png',
-                        'numpy',
-                        cmaps = ['gray', 'gray', 'gray', 'gray', 'jet'])
+    if save_vis == True:
+        utils_vis.save_all([images_all, labels_all, logits0_all, logits1_all, prob_fg_all],
+                            results_path + args.test_sub_dataset + '_all.png',
+                            'numpy',
+                            cmaps = ['gray', 'gray', 'gray', 'gray', 'jet'])
         
     # ===================
     # write quantitative results
     # ===================
-    write_results_to_file(results_path, args.test_sub_dataset, subject_dices, subject_names_ts, metric = 'dice')
-    write_results_to_file(results_path, args.test_sub_dataset, subject_eces, subject_names_ts, metric = 'ece')
+    write_results_to_file(results_path,
+                          args.test_sub_dataset,
+                          np.array(subject_dices),
+                          subject_names_ts,
+                          metric = 'dice')
+    
+    if compute_calibration_errors == True:
+        write_results_to_file(results_path,
+                              args.test_sub_dataset,
+                              np.array(subject_eces),
+                              subject_names_ts,
+                              metric = 'ece')

@@ -20,7 +20,7 @@ import nibabel as nib
 import SimpleITK as sitk
 import data_loader
 import utils_generic
-import utils_data
+import subprocess
 
 DEBUGGING = 0
 
@@ -46,24 +46,32 @@ def save_nii(img_path, data, affine, header=None):
 # Remove bias field
 # ===================================================
 # https://simpleitk.readthedocs.io/en/master/link_N4BiasFieldCorrection_docs.html
-def correct_bias_field(inputpath, outputpath):
+def correct_bias_field(inputpath,
+                       outputpath,
+                       software = 'sitk'):
     
-    inputImage = sitk.ReadImage(inputpath, sitk.sitkFloat32)
-    image = inputImage
+    if software == 'sitk':
+    
+        # using sitk
+        inputImage = sitk.ReadImage(inputpath, sitk.sitkFloat32)
+        image = inputImage
 
-    maskImage = sitk.OtsuThreshold(inputImage, 0, 1, 200)
-    shrinkFactor = 1
-    
-    corrector = sitk.N4BiasFieldCorrectionImageFilter()
-    
-    numberFittingLevels = 4
-    corrected_image = corrector.Execute(image, maskImage)
-    
-    log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
-    
-    corrected_image_full_resolution = inputImage / sitk.Exp(log_bias_field)
-    
-    sitk.WriteImage(corrected_image_full_resolution, outputpath)
+        maskImage = sitk.OtsuThreshold(inputImage, 0, 1, 200)
+        shrinkFactor = 1
+        
+        corrector = sitk.N4BiasFieldCorrectionImageFilter()
+        
+        numberFittingLevels = 4
+        corrected_image = corrector.Execute(image, maskImage)
+        
+        log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
+        
+        corrected_image_full_resolution = inputImage / sitk.Exp(log_bias_field)
+        
+        sitk.WriteImage(corrected_image_full_resolution, outputpath)
+
+    elif software == 'n4_exec':
+        subprocess.call(["/data/vision/polina/users/nkarani/projects/crael/seg/N4_th", inputpath, outputpath, "0.001"])
 
     return 1
 
@@ -496,7 +504,7 @@ def get_batch_subject(image, b, bs, device):
 
     x_batch = np.expand_dims(np.swapaxes(np.swapaxes(x_batch, 2, 1), 1, 0), axis = 1)
 
-    return utils_data.torch_and_send_to_device(x_batch, device)
+    return torch_and_send_to_device(x_batch, device)
 
 # ======================================================
 # ======================================================
@@ -529,14 +537,15 @@ def predict_segmentation(image,
                          px,
                          py,
                          nx,
-                         ny):
+                         ny,
+                         res):
 
     preds_soft = predict_logits_and_probs(image, model, device)[-1]
 
     preds_hard = np.argmax(preds_soft, axis = 1).astype(np.float32)
     
     preds_hard = rescale_and_crop(preds_hard,
-                                  scale = (0.625 / px, 0.625 / py),
+                                  scale = (res[0] / px, res[1] / py),
                                   size = (nx, ny),
                                   order = 0).astype(np.uint8)
     
@@ -588,6 +597,11 @@ def evaluate(dataset,
              num_labels = 2,
              save_vis = False):
 
+    if dataset == 'prostate':
+        res = [0.625, 0.625]
+    elif dataset == 'acdc':
+        res = [1.33, 1.33]
+
     data = data_loader.load_data(dataset,
                                  subdataset,
                                  cv_fold_num,
@@ -609,7 +623,8 @@ def evaluate(dataset,
                                         data["px"][sub],
                                         data["py"][sub],
                                         data["nx"][sub],
-                                        data["ny"][sub])
+                                        data["ny"][sub],
+                                        res)
 
             # read original label (without preprocessing)
             label = get_gt_label(dataset, 
