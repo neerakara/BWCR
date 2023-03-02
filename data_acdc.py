@@ -61,7 +61,7 @@ def get_train_test_val_split_ids(cv_fold_num):
     elif cv_fold_num == 20:
         idx_train_val = [90, 12, 70, 38, 6, 69, 32, 48, 64, 18, 93, 40, 10, 50, 67]
     elif cv_fold_num == 30:
-        idx_train_val = [23, 59, 60, 37, 86, 57, 37, 28, 27, 98, 89, 46, 28, 14, 35]
+        idx_train_val = [70, 68, 45, 83, 84, 53,  6, 23, 65, 71, 62,  7, 67, 72, 61]
 
     if cv_fold_num in [1, 2, 3]:
         train_test_val_split_ids['train'] = idx_train_val[:5]

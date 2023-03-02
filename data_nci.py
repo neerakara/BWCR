@@ -27,30 +27,37 @@ def get_train_test_val_split_ids(cv_fold_num):
 
     train_test_val_split_ids = {}
 
-    if cv_fold_num == 1: # 'small training dataset'
-        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
-        train_test_val_split_ids['validation'] = np.arange(10, 12, 1).tolist()
-        train_test_val_split_ids['train'] = np.arange(15, 20, 1).tolist()
+    # last 15 of RUNMC and last 15 of BMC
+    train_test_val_split_ids['test'] = np.arange(15, 30, 1).tolist() + np.arange(55, 70, 1).tolist()
 
-    elif cv_fold_num == 10: # 'small training dataset' | different data points
-        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
-        train_test_val_split_ids['validation'] = np.arange(12, 14, 1).tolist()
-        train_test_val_split_ids['train'] = np.arange(20, 25, 1).tolist()
+    # cv 1/2/3: num_train_label = 3+3 | num_val_label = 2+2 |  num_val_unlabel = 10+20
+    # np.random.choice(np.arange(0, 15, 1), 5, replace=False).tolist() + np.random.choice(np.arange(30, 55, 1), 5, replace=False).tolist()
+    # cv 10/20/30: num_train_label = 6+6 | num_val_label = 2+2 |  num_val_unlabel = 7+17
+    # ran "np.random.choice(np.arange(0, 15, 1), 8, replace=False).tolist() + np.random.choice(np.arange(30, 55, 1), 8, replace=False).tolist()"
+    # thrice and fixed values to avoid confusion when running again
+    if cv_fold_num == 1:
+        idx_train_val = [10, 14, 1, 7, 5, 34, 30, 37, 35, 48]
+    elif cv_fold_num == 2:
+        idx_train_val = [11, 14, 13, 0, 1, 40, 37, 54, 44, 32]
+    elif cv_fold_num == 3:
+        idx_train_val = [10, 4, 11, 3, 7, 48, 47, 35, 43, 42]
 
-    elif cv_fold_num == 2: # 'large training dataset'
-        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
-        train_test_val_split_ids['validation'] = np.arange(10, 15, 1).tolist()
-        train_test_val_split_ids['train'] = np.arange(15, 30, 1).tolist()
+    elif cv_fold_num == 10:
+        idx_train_val = [13, 2, 3, 9, 7, 1, 10, 0, 39, 44, 30, 31, 33, 45, 36, 47]
+    elif cv_fold_num == 20:
+        idx_train_val = [7, 3, 2, 12, 10, 14, 9, 6, 54, 42, 48, 32, 33, 47, 39, 45]
+    elif cv_fold_num == 30:
+        idx_train_val = [12, 6, 10, 13, 4, 3, 14, 8, 48, 37, 46, 43, 31, 33, 52, 35]
+        
+    if cv_fold_num in [1, 2, 3]:
+        train_test_val_split_ids['train'] = idx_train_val[:3] + idx_train_val[5:8]
+        train_test_val_split_ids['validation'] = idx_train_val[3:5] + idx_train_val[8:10]
+    elif cv_fold_num in [10, 20, 30]:
+        train_test_val_split_ids['train'] = idx_train_val[:6] + idx_train_val[8:14]
+        train_test_val_split_ids['validation'] = idx_train_val[6:8] + idx_train_val[14:16]
 
-    elif cv_fold_num == 3: # 'smaller training dataset'
-        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
-        train_test_val_split_ids['validation'] = np.arange(10, 12, 1).tolist()
-        train_test_val_split_ids['train'] = np.arange(15, 17, 1).tolist()
-
-    elif cv_fold_num == 30: # 'smaller training dataset' | different data points
-        train_test_val_split_ids['test'] = np.arange(0, 10, 1).tolist()
-        train_test_val_split_ids['validation'] = np.arange(12, 14, 1).tolist()
-        train_test_val_split_ids['train'] = np.arange(17, 19, 1).tolist()
+    idx_total = np.arange(0, 15, 1).astype(np.int8).tolist() + np.arange(30, 55, 1).astype(np.int8).tolist()
+    train_test_val_split_ids['train_unsupervised'] = [x for x in idx_total if x not in idx_train_val]
 
     return train_test_val_split_ids
 
@@ -71,20 +78,29 @@ def count_total_slices(folder_list, sub_ids):
     return num_slices
 
 # ===============================================================
-# Get folder names of all subjects of this dataset
+# This gives the folders in the following order:
+# 30 subjects of RUNMC, followed by 40 subjects of BMC
 # ===============================================================
-def get_patient_folders(image_folder, sub_dataset):
+def get_patient_folders(input_folder):
 
     folder_list = []
-    for folder in os.listdir(image_folder):    
-        if os.path.isdir(os.path.join(image_folder, folder)):
-            series_id = int(folder.split('-')[1])
-            patient_id = int(folder.split('-')[2])
-            if series_id == 1:
-                if sub_dataset == 'RUNMC' and patient_id > 30: # we only have labels for the first 30 subjects
+
+    for sub_dataset in ['RUNMC', 'BMC']:
+
+        if sub_dataset == 'RUNMC':
+            image_folder = input_folder + 'Prostate-3T/Images/'
+        elif sub_dataset == 'BMC':
+            image_folder = input_folder + 'PROSTATE-DIAGNOSIS/Images/'
+
+        for folder in os.listdir(image_folder):    
+            if os.path.isdir(os.path.join(image_folder, folder)):
+                series_id = int(folder.split('-')[1])
+                patient_id = int(folder.split('-')[2])
+
+                # For RUNMS, we only have labels for the first 30 subjects and only for series '01'
+                if sub_dataset == 'RUNMC' and ((patient_id > 30) or (series_id != 1)): 
                     continue
-                if sub_dataset == 'BMC' and patient_id == 55:
-                    continue
+
                 folder_list.append(os.path.join(image_folder, folder))
 
     return folder_list
@@ -94,29 +110,18 @@ def get_patient_folders(image_folder, sub_dataset):
 def prepare_data(input_folder,
                  preprocessing_folder,
                  output_file,
-                 sub_dataset,
                  train_test_val,
                  cv_fold_num,
                  size,
                  target_resolution):
 
-    # =======================
-    # =======================
-    if sub_dataset == 'RUNMC':
-        image_folder = input_folder + 'Prostate-3T/Images/'
-        label_folder = input_folder + 'Prostate-3T/Labels/'
-    elif sub_dataset == 'BMC':
-        image_folder = input_folder + 'PROSTATE-DIAGNOSIS/Images/'
-        label_folder = input_folder + 'PROSTATE-DIAGNOSIS/Labels/'
-
-    # =======================
-    # =======================
+    # create a h5 file
     hdf5_file = h5py.File(output_file, "w")
 
-    # =======================
-    # =======================
+    # get image paths of all subjects (RUNMC and BMC)
+    # label paths will be deduced from image paths
     logging.info('Counting files and parsing meta data...')
-    folder_list = get_patient_folders(image_folder, sub_dataset)
+    folder_list = get_patient_folders(input_folder)
 
     # get ids for this train / test / validation split
     logging.info('Getting ids of subjects to be read...')
@@ -235,6 +240,10 @@ def prepare_data(input_folder,
         # read the labels
         # ================================   
         logging.info('reading segmentation file...') 
+        if 'ProstateDx' in sub_name:
+            label_folder = input_folder + 'PROSTATE-DIAGNOSIS/Labels/'
+        elif 'Prostate3T' in sub_name:
+            label_folder = input_folder + 'Prostate-3T/Labels/'
         lbl_path = os.path.join(label_folder, sub_name + '.nrrd')
         lbl, _ = nrrd.read(lbl_path)
 
@@ -250,7 +259,7 @@ def prepare_data(input_folder,
         # ================================ 
         if sub_name == 'ProstateDx-01-0055':
             lbl_tmp = np.zeros(shape = img.shape, dtype = lbl.dtype)
-            lbl_tmp[:, :, :lbl.shape[2]] = lbl
+            lbl_tmp[:, :, 5 : 5 + lbl.shape[2]] = lbl
             lbl = lbl_tmp
         
         # ================================
@@ -272,18 +281,39 @@ def prepare_data(input_folder,
         image = np.zeros((nx, ny, img.shape[2]), dtype=np.float32)
         label = np.zeros((nx, ny, img.shape[2]), dtype=np.uint8)
         for zz in range(img.shape[2]):
-            img_rescaled = transform.rescale(np.squeeze(img[:, :, zz]), scale_vector, order=1, preserve_range=True, multichannel=False, mode = 'constant')
-            lbl_rescaled = transform.rescale(np.squeeze(lbl[:, :, zz]), scale_vector, order=0, preserve_range=True, multichannel=False, mode='constant')
+            img_rescaled = transform.rescale(np.squeeze(img[:, :, zz]),
+                                             scale_vector,
+                                             order=1,
+                                             preserve_range=True,
+                                             multichannel=False,
+                                             mode = 'constant')
+            
+            if sub_name == 'ProstateDx-01-0082':
+                lbl_rescaled = transform.rescale(np.squeeze(lbl[:, :, zz]),
+                                                 [pixel_size[0] / 0.5, pixel_size[1] / 0.5],
+                                                 order=0,
+                                                 preserve_range=True,
+                                                 multichannel=False,
+                                                 mode='constant')
+                lbl_rescaled = transform.rescale(lbl_rescaled,
+                                                 [0.5 / target_resolution[0], 0.5 / target_resolution[1]],
+                                                 order=0,
+                                                 preserve_range=True,
+                                                 multichannel=False,
+                                                 mode='constant')
+            else:
+                lbl_rescaled = transform.rescale(np.squeeze(lbl[:, :, zz]),
+                                                 scale_vector,
+                                                 order=0,
+                                                 preserve_range=True,
+                                                 multichannel=False,
+                                                 mode='constant')
+                
             img_cropped = utils_data.crop_or_pad(img_rescaled, nx, ny)
             lbl_cropped = utils_data.crop_or_pad(lbl_rescaled, nx, ny)
             image[:, :, zz] = img_cropped
             label[:, :, zz] = lbl_cropped
         
-        # ================================
-        # only binary segmentation
-        # ================================
-        label[label != 0] = 1
-
         # ==================
         # write image and label to hdf5 file
         # ==================
@@ -327,7 +357,6 @@ def _write_range_to_hdf5(hdf5_data,
 # ===============================================================
 def load_dataset(data_orig_path,
                  data_proc_path,
-                 sub_dataset, # RUNMC / BMC
                  train_test_val,
                  cv_fold,
                  size,
@@ -336,7 +365,7 @@ def load_dataset(data_orig_path,
 
     size_str = '_size_' + '_'.join([str(i) for i in size])
     res_str = '_res_' + '_'.join([str(i) for i in target_resolution])
-    data_file_name = sub_dataset + '_cv' + str(cv_fold) + '_' + str(train_test_val) + size_str + res_str + '.hdf5'
+    data_file_name = 'nci_cv' + str(cv_fold) + '_' + str(train_test_val) + size_str + res_str + '.hdf5'
     data_file_path = os.path.join(data_proc_path, data_file_name)
 
     if not os.path.exists(data_file_path) or force_overwrite:
@@ -345,7 +374,6 @@ def load_dataset(data_orig_path,
         prepare_data(data_orig_path,
                      data_proc_path,
                      data_file_path,
-                     sub_dataset,
                      train_test_val,
                      cv_fold,
                      size,
@@ -388,37 +416,39 @@ if __name__ == '__main__':
     # setup logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
-    sub_dataset = 'RUNMC'
-    cv_fold = 30
-    train_test_val = 'train'
-    size = (256, 256)
+    cv_fold = 3
+    train_test_val = 'test'
+    size = (192, 192)
+    target_res = (0.625, 0.625)
 
     data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/nci/'
     data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/'
 
     data = load_dataset(data_orig_path,
                         data_proc_path,
-                        sub_dataset,
                         train_test_val,
                         cv_fold,
                         size,
-                        target_resolution = (0.625, 0.625),
-                        force_overwrite=False)
+                        target_res,
+                        force_overwrite=True)
 
     # visualize
     images = data['images']
     labels = data['labels']
     subnames = data['subject_names']
     depths = data['depths']
+    px = data['px']
+    py = data['py']
     logging.info(images.shape)
     logging.info(labels.shape)
     logging.info(subnames)
     logging.info(depths)
 
-    plt.figure(figsize=(24, 6))
-    k=0
     num_subjects = len(subnames)
-    for s in range(8):
+    
+    plt.figure(figsize=(3*num_subjects, 6))
+    k=0
+    for s in range(num_subjects):
         if num_subjects < s + 1:
             continue
         
@@ -431,21 +461,26 @@ if __name__ == '__main__':
         
         # find slice with largest placenta
         logging.info(subject_label.shape)
-        placenta_sizes = np.sum(subject_label, axis=(0,1))
-        logging.info(placenta_sizes.shape)
-        idx_largest = np.argmax(placenta_sizes)
+        subject_label_tmp = np.copy(subject_label)
+        subject_label_tmp[subject_label_tmp != 0] = 1
+        fg_sizes = np.sum(subject_label_tmp, axis=(0,1))
+        idx_largest = np.argmax(fg_sizes)
+        logging.info(np.unique(subject_label))
+        logging.info(px[s])
+        logging.info(py[s])
         logging.info(idx_largest)
         slice_image = subject_image[:, :, idx_largest]
         slice_label = subject_label[:, :, idx_largest]
 
         # plot
-        plt.subplot(2, 8, s + 1, xticks=[], yticks=[])
+        plt.subplot(2, num_subjects, s + 1, xticks=[], yticks=[])
         plt.imshow(np.rot90(normalize_img_for_vis(slice_image),k), cmap = 'gray')
         plt.colorbar()
-        plt.subplot(2, 8, s + 9, xticks=[], yticks=[])
+        plt.subplot(2, num_subjects, s + num_subjects + 1, xticks=[], yticks=[])
         plt.imshow(np.rot90(normalize_img_for_vis(slice_label),k), cmap = 'gray')
         plt.colorbar()
+        plt.title(subnames[s])
 
-    savepath = data_proc_path + sub_dataset + '_cv_' + str(cv_fold) + '_' + train_test_val + '.png'
+    savepath = data_proc_path + 'nci_cv_' + str(cv_fold) + '_' + train_test_val + '.png'
     plt.savefig(savepath, bbox_inches='tight', dpi=50)
     plt.close()

@@ -565,9 +565,6 @@ def get_gt_label(dataset,
                                                 subname,
                                                 ttv)
     
-    if dataset == 'prostate':
-        label[label!=0] = 1
-    
     if subdataset in ['UCL', 'HK', 'BIDMC']:
         label = np.swapaxes(np.swapaxes(label, 0, 1), 1, 2)
     

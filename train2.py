@@ -127,7 +127,7 @@ def get_lambda_maps(labels,
     weights = lmax * np.ones_like(labels, dtype = np.float32)
     
     if weigh_per_distance == 1:
-        
+
         for idx in range(labels.shape[0]):
 
             if num_labels == 2: # binary segmentations
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     model = models.UNet2d(in_channels = 1,
                           num_labels = args.num_labels,
                           squeeze = False,
-                          output_layer_type = 2,
+                          output_layer_type = 2, # 2 fixes logits of class 0 to 0 (v10), 1 does not (v11)
                           device = device)
     model = model.to(device)
 
@@ -459,7 +459,7 @@ if __name__ == "__main__":
             if (best_dice_score_vl <= np.mean(dice_score_vl)):
                 best_dice_score_vl = np.mean(dice_score_vl)
                 torch.save({'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict()},
-                           models_path + 'best_val_iter' + str(iteration) + '.pt')
+                           models_path + 'best_val.pt')
                 logging.info('Found new best dice on val set: ' + str(best_dice_score_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
 
             # ===================================
@@ -468,7 +468,7 @@ if __name__ == "__main__":
             if (best_dice_score_ema_vl <= np.mean(dice_score_ema_vl)):
                 best_dice_score_ema_vl = np.mean(dice_score_ema_vl)
                 torch.save({'state_dict': model_ema.state_dict(), 'optimizer': optimizer.state_dict()},
-                           models_path + 'best_ema_val_iter' + str(iteration) + '.pt')
+                           models_path + 'best_ema_val.pt')
                 logging.info('Found new best dice on ema val set: ' + str(best_dice_score_ema_vl) + ' at iteration ' + str(iteration + 1) + '. Saved model.')
 
         if (iteration % (50 * args.eval_frequency) == 0):

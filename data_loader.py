@@ -1,4 +1,5 @@
 import data_placenta
+import data_nci
 import data_prostate_nci
 import data_prostate_promise
 import data_ms
@@ -36,6 +37,14 @@ def load_data(dataset,
                                                   cv_fold = cv_fold_num,
                                                   size = (256, 256),
                                                   target_resolution = (0.625, 0.625))
+            
+        elif sub_dataset in ['nci']:
+            data = data_nci.load_dataset(data_orig_path + 'nci/',
+                                         data_proc_path,
+                                         train_test_val = train_test_val,
+                                         cv_fold = cv_fold_num,
+                                         size = (192, 192),
+                                         target_resolution = (0.625, 0.625))
 
         elif sub_dataset in ['UCL', 'HK', 'BIDMC']:
             data = data_prostate_promise.load_dataset(data_orig_path + 'promise/',
@@ -79,7 +88,7 @@ def load_without_preproc(dataset,
         data_orig_path = '/data/vision/polina/users/nkarani/data/segmentation/prostate/original/' # orig data is here
         data_proc_path = '/data/vision/polina/users/nkarani/projects/crael/seg/data/prostate/' # save processed data here
         # data_proc_path = '/data/scratch/nkarani/projects/crael/seg/data/prostate/' # save processed data here
-        if sub_dataset in ['RUNMC', 'BMC']:
+        if sub_dataset in ['RUNMC', 'BMC', 'nci']:
             image, label = data_prostate_nci.load_without_preproc(data_proc_path,
                                                                   subject_name)
 

@@ -185,7 +185,8 @@ if __name__ == "__main__":
     # ===================================
     # load model weights
     # ===================================
-    modelpath = utils_generic.get_best_modelpath(models_path, 'best_ema_val_iter')
+    # modelpath = utils_generic.get_best_modelpath(models_path, 'best_ema_val_iter')
+    modelpath = models_path + 'best_ema_val.pt'
     logging.info('loading model weights from: ')
     logging.info(modelpath)
     model.load_state_dict(torch.load(modelpath)['state_dict'])
