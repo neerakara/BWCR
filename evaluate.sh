@@ -22,15 +22,17 @@ source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
 --dataset $1 \
 --sub_dataset $2 \
---cv_fold_num $3 \
---run_number $4 \
---data_aug_prob $5 \
---l0 $6 \
---l1 $7 \
---l2 $8 \
---l1_loss $9 \
---l2_loss ${10} \
---weigh_lambda_con ${11}
+--test_sub_dataset $3 \
+--cv_fold_num $4 \
+--run_number $5 \
+--data_aug_prob $6 \
+--l0 $7 \
+--l1 $8 \
+--l2 $9 \
+--l1_loss ${10} \
+--l2_loss ${11} \
+--weigh_lambda_con ${12} \
+--num_labels ${13}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

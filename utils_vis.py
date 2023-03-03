@@ -173,6 +173,7 @@ def save_images_labels_predictions_soft_and_hard(images,
         plt.subplot(4, 4, 4*batch_index + 4, xticks=[], yticks=[]); plt.imshow(prh, cmap = 'gray'); plt.colorbar()
 
     plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
     
     return 0
 
@@ -190,6 +191,7 @@ def save_results(images,
     plt.subplot(1, 3, 2); plt.imshow(normalize_img_for_vis(labels[:,:,zz]), cmap = 'gray')
     plt.subplot(1, 3, 3); plt.imshow(normalize_img_for_vis(preds[:,:,zz]), cmap = 'gray')
     plt.savefig(savepath, bbox_inches='tight', dpi=50)
+    plt.close()
 
     return 0
 

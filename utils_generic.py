@@ -38,7 +38,10 @@ def make_expdir_2(args):
     logdir = logdir + '/t_' + str(args.temp) + '/'
 
     # run number
-    logdir = logdir + 'run' + str(args.run_number) + '/'
+    if args.out_layer_type == 2:
+        logdir = logdir + 'run' + str(args.run_number) + '/'
+    else:
+        logdir = logdir + 'run' + str(args.run_number) + '_output_layer_type_1/'
     
     return logdir
 

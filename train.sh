@@ -8,13 +8,14 @@
 ## SLURM Variables:
 #SBATCH  --output=/data/scratch/nkarani/logs/%j.out
 #SBATCH  --partition=titan,2080ti,gpu
-#SBATCH  --exclude=anise,curcum,sumac,fennel,urfa-biber,rosemary,juniper,cassia,marjoram
+#SBATCH  --exclude=anise
 #SBATCH  --gres=gpu:1
 #SBATCH  --cpus-per-task=8
 #SBATCH  --mem=12G
 #SBATCH  --time=24:00:00
 #SBATCH  --priority='TOP'
 
+# ,curcum,sumac,fennel,urfa-biber,rosemary,juniper,cassia,marjoram
 # activate virtual environment
 source /data/vision/polina/users/nkarani/anaconda3/bin/activate env_crael
 
@@ -31,7 +32,8 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/train2.py \
 --l1_loss $9 \
 --l2_loss ${10} \
 --weigh_lambda_con ${11} \
---num_labels ${12}
+--num_labels ${12} \
+--out_layer_type ${13}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

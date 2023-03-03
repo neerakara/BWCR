@@ -193,6 +193,7 @@ if __name__ == "__main__":
     parser.add_argument('--alpha_layer', default=1.0, type=float) # 1.0
     parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
+    parser.add_argument('--out_layer_type', default=2, type=int) # 1 / 2 (fix logits of class 0 to 0)
         
     parser.add_argument('--run_number', default=1, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
@@ -236,7 +237,7 @@ if __name__ == "__main__":
     model = models.UNet2d(in_channels = 1,
                           num_labels = args.num_labels,
                           squeeze = False,
-                          output_layer_type = 2, # 2 fixes logits of class 0 to 0 (v10), 1 does not (v11)
+                          output_layer_type = args.out_layer_type, # 2 fixes logits of class 0 to 0, 1 does not
                           device = device)
     model = model.to(device)
 

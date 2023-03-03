@@ -302,8 +302,8 @@ if __name__ == "__main__":
         # ===================
         # visualize results
         # ===================
-        save_vis = False
-        if save_vis == True:
+        save_vis_individual = False
+        if save_vis_individual == True:
             utils_vis.save_results(image_orig,
                                    label_orig,
                                    hard_prediction_orig_res_and_size,
@@ -316,7 +316,8 @@ if __name__ == "__main__":
                                              label = label_orig,
                                              num_labels = args.num_labels)[0])
 
-        if save_vis == True:
+        save_vis_multiple = False
+        if save_vis_multiple == True:
             # ===================
             # collect 2d slices with largest foreground
             # ===================
@@ -330,7 +331,7 @@ if __name__ == "__main__":
     # ===================
     # visualize results
     # ===================
-    if save_vis == True:
+    if save_vis_multiple == True:
         utils_vis.save_all([images_all, labels_all, logits0_all, logits1_all, prob_fg_all],
                             results_path + args.test_sub_dataset + '_all.png',
                             'numpy',
