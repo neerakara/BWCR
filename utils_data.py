@@ -592,6 +592,7 @@ def evaluate(dataset,
              model,
              device,
              num_labels = 2,
+             data = None,
              save_vis = False):
 
     if dataset == 'prostate':
@@ -599,10 +600,8 @@ def evaluate(dataset,
     elif dataset == 'acdc':
         res = [1.33, 1.33]
 
-    data = data_loader.load_data(dataset,
-                                 subdataset,
-                                 cv_fold_num,
-                                 ttv)
+    if data == None:
+        data = data_loader.load_data(dataset, subdataset, cv_fold_num, ttv)
     
     dice_scores = []
     

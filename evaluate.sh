@@ -32,7 +32,8 @@ python /data/vision/polina/users/nkarani/projects/crael/seg/evaluate.py \
 --l1_loss ${10} \
 --l2_loss ${11} \
 --weigh_lambda_con ${12} \
---num_labels ${13}
+--num_labels ${13} \
+--out_layer_type ${14}
 
 echo "Hostname was: `hostname`"
 echo "Reached end of job file."

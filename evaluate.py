@@ -116,7 +116,8 @@ if __name__ == "__main__":
     parser.add_argument('--cv_fold_num', default=1, type=int)
     parser.add_argument('--num_labels', default=4, type=int)
 
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v10/')
+    # parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v10/')
+    parser.add_argument('--save_path', default='/data/vision/polina/users/nkarani/projects/crael/logdir/v13/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
@@ -131,9 +132,11 @@ if __name__ == "__main__":
     parser.add_argument('--l2_loss', default='l2') # 'ce' / 'l2' / 'l2_margin' 
     parser.add_argument('--l2_loss_margin', default=0.0, type=float) # 0.1
     parser.add_argument('--weigh_lambda_con', default=0, type=int) # 0 / 1
+    parser.add_argument('--gjs_loss_weight', default=0.0, type=float) # 0.0
     parser.add_argument('--alpha_layer', default=10.0, type=float) # 1.0
     parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
+    parser.add_argument('--out_layer_type', default=1, type=int) # 1 / 2 (fix logits of class 0 to 0)
     
     parser.add_argument('--run_number', default=2, type=int)
     parser.add_argument('--debugging', default=0, type=int)    
@@ -178,7 +181,7 @@ if __name__ == "__main__":
     model = models.UNet2d(in_channels = 1,
                           num_labels = args.num_labels,
                           squeeze = False,
-                          output_layer_type = 2,
+                          output_layer_type = args.out_layer_type, # 2 fixes logits of class 0 to 0, 1 does not
                           device = device)
     model = model.to(device)
 

@@ -19,6 +19,7 @@ import utils_data
 import utils_vis
 import utils_generic
 import data_loader
+import utils_losses
 
 # ======================================================
 # Function used to evaluate entire training / validation sets during training
@@ -27,7 +28,8 @@ def evaluate(args,
              model,
              device,
              subdataset,
-             ttv):
+             ttv,
+             data = None):
 
     # set model to evaluate mode
     model.eval()
@@ -39,7 +41,8 @@ def evaluate(args,
                                       ttv,
                                       model,
                                       device,
-                                      args.num_labels)
+                                      args.num_labels,
+                                      data)
 
     # set model back to training mode
     model.train()
@@ -87,72 +90,6 @@ def make_1hot(y, n):
     return utils_data.make_label_onehot(y, n)
 
 # ==========================================
-# ==========================================    
-def get_losses(preds,
-               targets,
-               mask = None,
-               loss_type = 'ce',
-               margin = 0.1):
-        
-    if loss_type == 'ce':
-        loss_pc = - targets * F.log_softmax(preds, dim=1) # pixel wise cross entropy
-    elif loss_type == 'l2':
-        loss_pc = torch.square(preds - targets) # pixel wise square difference
-    elif loss_type == 'l2_all':
-        loss_pc = torch.square(preds - targets) # pixel wise square difference (using another tag to indicate consistency at all layers)
-    elif loss_type == 'l2_margin': # pixel wise square difference | thresholded at margin
-        loss_pc = torch.maximum(torch.square(preds - targets), margin * torch.ones_like(torch.square(preds - targets)))
-
-    if mask != None:
-        loss_pc = torch.mul(loss_pc, mask)
-    
-    loss_p = torch.mean(loss_pc, dim = 1) # average across channels (classes in the last layer)
-    loss = torch.mean(loss_p) # mean over all pixels and all images in the batch
-    
-    return loss_pc, loss_p, loss
-    
-	
-# ==========================================
-# the weights here are for relative weighting of pixels within the consistency loss only
-# the importance of consistency loss vs supervised loss is set by the args.l2 parameter when the losses are combined
-# ==========================================
-def get_lambda_maps(labels,
-                    weigh_per_distance, # whether to make weight vary as per distance from the boundary or not
-                    num_labels,
-                    lmax = 1.0, # max value (applied to pixels on the tissue boundary)
-                    R = 10.0, # margin around the boundary where the lambda values vary
-                    drop_factor = 100.0, # min value (applied to pixels farther away than the margin) = lmax / drop_factor
-                    alp = 1.0): # rate of decrease of lambda away from the boundary
-                     
-    weights = lmax * np.ones_like(labels, dtype = np.float32)
-    
-    if weigh_per_distance == 1:
-
-        for idx in range(labels.shape[0]):
-
-            if num_labels == 2: # binary segmentations
-                sdt = utils_data.compute_sdt(labels[idx, 0, :, :])
-                weights[idx, 0, :, :] = utils_data.compute_lambda_map(sdt, R, lmax / drop_factor, lmax, alp)
-
-            else: # multi-label segmentations
-                label = labels[idx, 0, :, :]
-                lamdas = []
-                
-                for c in range(1, num_labels):
-                    
-                    label_tmp = np.copy(label)
-                    label_tmp[label_tmp != c] = 0
-                    label_tmp[label_tmp == c] = 1
-                    
-                    sdt = utils_data.compute_sdt(label_tmp)
-                    lam = utils_data.compute_lambda_map(sdt, R, lmax / drop_factor, lmax, alp)
-                    lamdas.append(lam)  
-
-                weights[idx, 0, :, :] = np.max(np.array(lamdas), axis=0)
-        
-    return weights
-
-# ==========================================
 # ==========================================
 if __name__ == "__main__":
 
@@ -172,13 +109,14 @@ if __name__ == "__main__":
     parser.add_argument('--sub_dataset', default='acdc') # prostate: BIDMC / BMC / HK / I2CVB / RUNMC / UCL / InD / OoD
     parser.add_argument('--cv_fold_num', default=2, type=int)
     parser.add_argument('--num_labels', default=4, type=int)
-    parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v10/')
+    # parser.add_argument('--save_path', default='/data/scratch/nkarani/projects/crael/seg/logdir/v10/')
+    parser.add_argument('--save_path', default='/data/vision/polina/users/nkarani/projects/crael/logdir/v13/')
     
     parser.add_argument('--data_aug_prob', default=0.5, type=float)
     parser.add_argument('--optimizer', default='adam') # adam / sgd
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_iterations', default=30001, type=int)
+    parser.add_argument('--max_iterations', default=50001, type=int)
     parser.add_argument('--eval_frequency', default=100, type=int)
     parser.add_argument('--save_frequency', default=10000, type=int)
 
@@ -190,6 +128,7 @@ if __name__ == "__main__":
     parser.add_argument('--l2_loss', default='l2') # 'ce' / 'l2' / 'l2_margin' / 'l2_all' / 'l2_all_margin'
     parser.add_argument('--l2_loss_margin', default=0.0, type=float) # 0.1
     parser.add_argument('--weigh_lambda_con', default=0, type=int) # 0 / 1
+    parser.add_argument('--gjs_loss_weight', default=0.0, type=float) # 0.0
     parser.add_argument('--alpha_layer', default=1.0, type=float) # 1.0
     parser.add_argument('--temp', default=1.0, type=float) # 1 / 2
     parser.add_argument('--teacher', default='self') # 'self' / 'ema'
@@ -280,6 +219,7 @@ if __name__ == "__main__":
     # ===================================
     logging.info('Reading training and validation data')
     data_tr = data_loader.load_data(args.dataset, args.sub_dataset, args.cv_fold_num, 'train')
+    data_vl = data_loader.load_data(args.dataset, args.sub_dataset, args.cv_fold_num, 'validation')
     images_tr = data_tr["images"]
     labels_tr = data_tr["labels"]
     subject_names_tr = data_tr["subject_names"]
@@ -330,17 +270,21 @@ if __name__ == "__main__":
             sup_loss1_p = labels1_inv # irrelevant
             sup_loss2_p = labels2_inv # irrelevant
 
-        else:
-            sup_loss0_pc, sup_loss0_p, sup_loss0 = get_losses(preds = outputs0[-1],
-                                                              targets = make_1hot(labels0_gpu, args.num_labels))
-        
-            sup_loss1_pc, sup_loss1_p, sup_loss1 = get_losses(preds = logits1_inv,
-                                                              targets = make_1hot(labels1_inv, args.num_labels),
-                                                              mask = mask1)
-        
-            sup_loss2_pc, sup_loss2_p, sup_loss2 = get_losses(preds = logits2_inv,
-                                                              targets = make_1hot(labels2_inv, args.num_labels),
-                                                              mask = mask2)
+        elif args.l1_loss in ['ce', 'ce_svls']:
+
+            if args.l1_loss == 'ce':
+                targets0 = make_1hot(labels0_gpu, args.num_labels)
+                targets1 = make_1hot(labels1_inv, args.num_labels)
+                targets2 = make_1hot(labels2_inv, args.num_labels)
+
+            elif args.l1_loss == 'ce_svls':
+                targets0 = utils_losses.smoothen_labels(labels0_gpu, args.num_labels, device)
+                targets1 = utils_losses.smoothen_labels(labels1_inv, args.num_labels, device)
+                targets2 = utils_losses.smoothen_labels(labels2_inv, args.num_labels, device)
+
+            sup_loss0_pc, sup_loss0_p, sup_loss0 = utils_losses.get_losses(preds = outputs0[-1], targets = targets0)
+            sup_loss1_pc, sup_loss1_p, sup_loss1 = utils_losses.get_losses(preds = logits1_inv, targets = targets1, mask = mask1)
+            sup_loss2_pc, sup_loss2_p, sup_loss2 = utils_losses.get_losses(preds = logits2_inv, targets = targets2, mask = mask2)
 
         # =======================
         # E consistency losses / soft label losses on (1) transformed data 1, (2) transformed data 2 (using the other's preds as soft targets)
@@ -350,32 +294,45 @@ if __name__ == "__main__":
         # determine per-pixel loss weighting, if desired
         # =======================
         mask_con = torch.mul(mask1, mask2)
-        weight_lambda = get_lambda_maps(labels0_cpu, args.weigh_lambda_con, args.num_labels)
+        weight_lambda = utils_losses.get_lambda_maps(labels0_cpu, args.weigh_lambda_con, args.num_labels)
         weight_lambda = utils_data.torch_and_send_to_device(weight_lambda, device)
         weight_lambda = weight_lambda.repeat(1, mask_con.shape[1], 1, 1)
         mask_con = torch.mul(mask_con, weight_lambda)
 
         if args.l2_loss == 'ce':
-            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(preds = logits1_inv,
-                                                              targets = F.softmax(logits2_inv / args.temp, dim = 1),
-                                                              mask = mask_con)
+            con_loss1_pc, con_loss1_p, con_loss1 = utils_losses.get_losses(preds = logits1_inv,
+                                                                           targets = F.softmax(logits2_inv / args.temp, dim = 1),
+                                                                           mask = mask_con)
         
-            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(preds = logits2_inv,
-                                                              targets = F.softmax(logits1_inv / args.temp, dim = 1),
-                                                              mask = mask_con)
+            con_loss2_pc, con_loss2_p, con_loss2 = utils_losses.get_losses(preds = logits2_inv,
+                                                                           targets = F.softmax(logits1_inv / args.temp, dim = 1),
+                                                                           mask = mask_con)
             
         elif args.l2_loss in ['l2', 'l2_margin']:
-            con_loss1_pc, con_loss1_p, con_loss1 = get_losses(preds = logits1_inv,
-                                                              targets = logits2_inv,
-                                                              mask = mask_con,
-                                                              loss_type = args.l2_loss,
-                                                              margin = args.l2_loss_margin)
+            con_loss1_pc, con_loss1_p, con_loss1 = utils_losses.get_losses(preds = logits1_inv,
+                                                                           targets = logits2_inv,
+                                                                           mask = mask_con,
+                                                                            loss_type = args.l2_loss,
+                                                                            margin = args.l2_loss_margin)
         
-            con_loss2_pc, con_loss2_p, con_loss2 = get_losses(preds = logits2_inv,
-                                                              targets = logits1_inv,
-                                                              mask = mask_con,
-                                                              loss_type = args.l2_loss,
-                                                              margin = args.l2_loss_margin)
+            con_loss2_pc, con_loss2_p, con_loss2 = utils_losses.get_losses(preds = logits2_inv,
+                                                                           targets = logits1_inv,
+                                                                           mask = mask_con,
+                                                                           loss_type = args.l2_loss,
+                                                                           margin = args.l2_loss_margin)
+            
+        elif args.l2_loss in ['js']:
+            con_loss1_pc, con_loss1_p, con_loss1 = utils_losses.get_losses(preds = torch.nn.Softmax(dim=1)(logits1_inv),
+                                                                           targets = torch.nn.Softmax(dim=1)(logits2_inv),
+                                                                           mask = mask_con,
+                                                                           loss_type = args.l2_loss,
+                                                                           margin = args.l2_loss_margin)
+        
+            con_loss2_pc, con_loss2_p, con_loss2 = utils_losses.get_losses(preds = torch.nn.Softmax(dim=1)(logits2_inv),
+                                                                           targets = torch.nn.Softmax(dim=1)(logits1_inv),
+                                                                           mask = mask_con,
+                                                                           loss_type = args.l2_loss,
+                                                                           margin = args.l2_loss_margin)
 
         # =======================
         # F consistency losses at all layers
@@ -393,11 +350,11 @@ if __name__ == "__main__":
                 features2_inv, mask2 = invert_features(outputs2[l], t2, 'bilinear', True, inputs2_gpu.shape, device)
                 
                 # compute consistency loss
-                _, con_loss1_p, con_loss1_l = get_losses(preds = features1_inv,
-                                                         targets = features2_inv,
-                                                         mask = torch.mul(mask1, mask2),
-                                                         loss_type = args.l2_loss,
-                                                         margin = args.l2_loss_margin)
+                _, con_loss1_p, con_loss1_l = utils_losses.get_losses(preds = features1_inv,
+                                                                      targets = features2_inv,
+                                                                      mask = torch.mul(mask1, mask2),
+                                                                      loss_type = args.l2_loss,
+                                                                      margin = args.l2_loss_margin)
                 cons_loss1_layer_l.append(con_loss1_l)
                 
                 # add loss to tb
@@ -448,10 +405,10 @@ if __name__ == "__main__":
         # ===================================
         if (iteration % args.eval_frequency == 0):
 
-            dice_score_vl = evaluate(args, model, device, args.sub_dataset, 'validation')
+            dice_score_vl = evaluate(args, model, device, args.sub_dataset, 'validation', data_vl)
             writer.add_scalar("Dice/Val", np.mean(dice_score_vl), iteration+1)
 
-            dice_score_ema_vl = evaluate(args, model_ema, device, args.sub_dataset, 'validation')
+            dice_score_ema_vl = evaluate(args, model_ema, device, args.sub_dataset, 'validation', data_vl)
             writer.add_scalar("Dice_EMA/Val", np.mean(dice_score_ema_vl), iteration+1)            
 
             # ===================================
@@ -480,12 +437,12 @@ if __name__ == "__main__":
                                                                              global_step = iteration+1)
             
             dice_score_ts = evaluate(args, model, device, args.sub_dataset, 'test')
-            dice_score_tr = evaluate(args, model, device, args.sub_dataset, 'train')            
+            dice_score_tr = evaluate(args, model, device, args.sub_dataset, 'train', data_tr)            
             writer.add_scalar("Dice/Test", np.mean(dice_score_ts), iteration+1)
             writer.add_scalar("Dice/Train", np.mean(dice_score_tr), iteration+1)
             
             dice_score_ema_ts = evaluate(args, model_ema, device, args.sub_dataset, 'test')
-            dice_score_ema_tr = evaluate(args, model_ema, device, args.sub_dataset, 'train')
+            dice_score_ema_tr = evaluate(args, model_ema, device, args.sub_dataset, 'train', data_tr)
             writer.add_scalar("Dice_EMA/Test", np.mean(dice_score_ema_ts), iteration+1)
             writer.add_scalar("Dice_EMA/Train", np.mean(dice_score_ema_tr), iteration+1)
 

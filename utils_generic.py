@@ -23,8 +23,11 @@ def make_expdir_2(args):
     logdir = logdir + '/l1_' + args.l1_loss + '_' + str(args.l1) 
     logdir = logdir + '/l2_' + args.l2_loss + '_' + str(args.l2) 
     
+    if args.gjs_loss_weight != 0.0:
+        logdir = logdir + '_gjs' + str(args.gjs_loss_weight)
+    
     if args.weigh_lambda_con == 1:
-        logdir = logdir + '_distance_weighing'
+        logdir = logdir + '_distance_weighing'        
 
     if args.l2_loss == 'l2_margin':
         logdir = logdir + '/' + str(args.l2_loss_margin)
