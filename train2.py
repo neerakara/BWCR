@@ -286,6 +286,16 @@ if __name__ == "__main__":
             sup_loss1_pc, sup_loss1_p, sup_loss1 = utils_losses.get_losses(preds = logits1_inv, targets = targets1, mask = mask1)
             sup_loss2_pc, sup_loss2_p, sup_loss2 = utils_losses.get_losses(preds = logits2_inv, targets = targets2, mask = mask2)
 
+        elif args.l1_loss in ['ce_margin']: # Liu CVPR / Bala MedIA
+
+            targets0 = make_1hot(labels0_gpu, args.num_labels)
+            targets1 = make_1hot(labels1_inv, args.num_labels)
+            targets2 = make_1hot(labels2_inv, args.num_labels)
+
+            sup_loss0_pc, sup_loss0_p, sup_loss0 = utils_losses.get_losses(preds = outputs0[-1], targets = targets0, loss_type = args.l1_loss)
+            sup_loss1_pc, sup_loss1_p, sup_loss1 = utils_losses.get_losses(preds = logits1_inv, targets = targets1, mask = mask1, loss_type = args.l1_loss)
+            sup_loss2_pc, sup_loss2_p, sup_loss2 = utils_losses.get_losses(preds = logits2_inv, targets = targets2, mask = mask2, loss_type = args.l1_loss)
+
         # =======================
         # E consistency losses / soft label losses on (1) transformed data 1, (2) transformed data 2 (using the other's preds as soft targets)
         # =======================
@@ -312,8 +322,8 @@ if __name__ == "__main__":
             con_loss1_pc, con_loss1_p, con_loss1 = utils_losses.get_losses(preds = logits1_inv,
                                                                            targets = logits2_inv,
                                                                            mask = mask_con,
-                                                                            loss_type = args.l2_loss,
-                                                                            margin = args.l2_loss_margin)
+                                                                           loss_type = args.l2_loss,
+                                                                           margin = args.l2_loss_margin)
         
             con_loss2_pc, con_loss2_p, con_loss2 = utils_losses.get_losses(preds = logits2_inv,
                                                                            targets = logits1_inv,

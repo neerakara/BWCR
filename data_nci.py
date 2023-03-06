@@ -34,6 +34,8 @@ def get_train_test_val_split_ids(cv_fold_num):
     # np.random.choice(np.arange(0, 15, 1), 5, replace=False).tolist() + np.random.choice(np.arange(30, 55, 1), 5, replace=False).tolist()
     # cv 10/20/30: num_train_label = 6+6 | num_val_label = 2+2 |  num_val_unlabel = 7+17
     # ran "np.random.choice(np.arange(0, 15, 1), 8, replace=False).tolist() + np.random.choice(np.arange(30, 55, 1), 8, replace=False).tolist()"
+    # cv 100/200/300: num_train_label = 6+6 | num_val_label = 2+2 |  num_val_unlabel = 7+17
+    # ran "np.random.choice(np.arange(0, 15, 1), 8, replace=False).tolist() + np.random.choice(np.arange(30, 55, 1), 8, replace=False).tolist()"
     # thrice and fixed values to avoid confusion when running again
     if cv_fold_num == 1:
         idx_train_val = [10, 14, 1, 7, 5, 34, 30, 37, 35, 48]
@@ -48,6 +50,13 @@ def get_train_test_val_split_ids(cv_fold_num):
         idx_train_val = [7, 3, 2, 12, 10, 14, 9, 6, 54, 42, 48, 32, 33, 47, 39, 45]
     elif cv_fold_num == 30:
         idx_train_val = [12, 6, 10, 13, 4, 3, 14, 8, 48, 37, 46, 43, 31, 33, 52, 35]
+
+    elif cv_fold_num == 100:
+        idx_train_val = [13, 4, 9, 1, 3, 0, 7, 12, 8, 5, 10, 2, 11, 6, 14, 52, 47, 51, 35, 37, 46, 33, 32, 44, 34, 30, 42, 53, 43, 50, 48, 38, 49, 45, 41, 54, 40, 36, 39, 31]
+    elif cv_fold_num == 200:
+        idx_train_val = [6, 14, 13, 0, 3, 11, 5, 4, 10, 1, 8, 9, 7, 12, 2, 36, 50, 30, 46, 34, 39, 51, 44, 53, 42, 48, 49, 52, 33, 41, 47, 37, 43, 32, 40, 31, 45, 38, 54, 35]
+    elif cv_fold_num == 300:
+        idx_train_val = [13, 9, 1, 11, 2, 6, 10, 4, 5, 3, 7, 12, 8, 14, 0, 40, 54, 52, 43, 38, 50, 49, 46, 47, 42, 31, 51, 30, 39, 32, 53, 41, 37, 45, 35, 48, 33, 34, 36, 44]
         
     if cv_fold_num in [1, 2, 3]:
         train_test_val_split_ids['train'] = idx_train_val[:3] + idx_train_val[5:8]
@@ -55,9 +64,13 @@ def get_train_test_val_split_ids(cv_fold_num):
     elif cv_fold_num in [10, 20, 30]:
         train_test_val_split_ids['train'] = idx_train_val[:6] + idx_train_val[8:14]
         train_test_val_split_ids['validation'] = idx_train_val[6:8] + idx_train_val[14:16]
+    elif cv_fold_num in [100, 200, 300]:
+        train_test_val_split_ids['train'] = idx_train_val[:13] + idx_train_val[15:38]
+        train_test_val_split_ids['validation'] = idx_train_val[13:15] + idx_train_val[38:40]
 
-    idx_total = np.arange(0, 15, 1).astype(np.int8).tolist() + np.arange(30, 55, 1).astype(np.int8).tolist()
-    train_test_val_split_ids['train_unsupervised'] = [x for x in idx_total if x not in idx_train_val]
+    if cv_fold_num in [1, 2, 3, 10, 20, 30]:
+        idx_total = np.arange(0, 15, 1).astype(np.int8).tolist() + np.arange(30, 55, 1).astype(np.int8).tolist()
+        train_test_val_split_ids['train_unsupervised'] = [x for x in idx_total if x not in idx_train_val]
 
     return train_test_val_split_ids
 

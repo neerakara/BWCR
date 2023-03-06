@@ -178,6 +178,10 @@ def get_losses(preds,
         
     if loss_type == 'ce':
         loss_pc = - targets * F.log_softmax(preds, dim=1) # pixel wise cross entropy
+    elif loss_type == 'ce_margin':
+        loss_pc_ce = - targets * F.log_softmax(preds, dim=1) # pixel wise cross entropy
+        loss_pc_margin = get_margin_loss(preds)
+        loss_pc = loss_pc_ce + 0.1 * loss_pc_margin # lambda fixed to 0.1 in https://arxiv.org/pdf/2209.09641.pdf
     elif loss_type == 'l2':
         loss_pc = torch.square(preds - targets) # pixel wise square difference
     elif loss_type == 'l2_all':
@@ -295,3 +299,14 @@ def get_svls_filter_2d(num_classes,
     svls_kernel_2d = svls_kernel_2d.repeat(num_classes, 1, 1, 1)
     
     return svls_kernel_2d
+
+# ==========================================
+# inspired from https://github.com/by-liu/MbLS/blob/main/calibrate/losses/logit_margin_l1.py
+# ==========================================
+def get_margin_loss(logits, margin = 10.0):
+    max_values = logits.max(dim=1)
+    max_values = max_values.values.unsqueeze(dim=1).repeat(1, logits.shape[1], 1, 1)
+    diff = max_values - logits
+    # linear penalty where logit distances are larger than the margin
+    loss_margin = F.relu(diff - margin)
+    return loss_margin
