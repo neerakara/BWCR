@@ -14,25 +14,95 @@ from PIL import Image, ImageDraw, ImageFont
 from skimage import data, color
 from skimage.segmentation import mark_boundaries
 
+
+def get_center_roi(label):
+    
+    # Get row and column indices of non-zero elements
+    rows, cols = np.nonzero(label)
+
+    # Calculate mean row and column indices
+    mean_row = np.mean(rows)
+    mean_col = np.mean(cols)
+
+    # Round to nearest integer to get pixel coordinates
+    return int(np.round(mean_row)), int(np.round(mean_col))
+
+def resolve_boundary(c, n, d):
+    if c < d:
+        s = 0
+        e = 2 * d
+    elif c > n - d:
+        s = - 2 * d
+        e = -1
+    else:
+        s = c - d
+        e = c + d
+    
+    return s, e
+
+# ===================
+# visualize results
+# ===================
+def save_results_zoom(image, # x, y, nz
+                      label, # x, y, nz
+                      logits, # nz, nc, x, y
+                      soft_pred, # nz, nc, x, y
+                      hard_pred, # nz, x, y
+                      savepath):
+    
+    # find slice with largest foreground
+    zz = np.argmax(np.sum(label, axis=(0,1)))
+    # find center of foreground in this slice
+    lbl_tmp = np.copy(label[:,:,zz])
+    # roi is centered around this pixel
+    cx, cy = get_center_roi(lbl_tmp)
+    nx, ny = label.shape[0], label.shape[1]
+    d = 60
+    sx, ex = resolve_boundary(cx, nx, d)
+    sy, ey = resolve_boundary(cy, ny, d)
+
+    # 
+    img = image[sx:ex, sy:ey, zz]
+    lbl = label[sx:ex, sy:ey, zz]
+    img_lbl = mark_boundaries(img, lbl, color=(0,0,1), mode='thick')
+    prd = hard_pred[zz, sx:ex, sy:ey]
+    img_prd = mark_boundaries(img, prd, color=(0,1,0), mode='thick')
+    logs = logits[zz, :, sx:ex, sy:ey]
+    probs = soft_pred[zz, :, sx:ex, sy:ey]
+
+    save_image_wo_normalization(img, savepath + '_img.png')
+    # save_image_wo_normalization(lbl, savepath + '_lbl.png')
+    save_image_wo_normalization(img_lbl, savepath + '_lbl.png', None)
+    save_image_wo_normalization(img_prd, savepath + '_prd.png', None)
+    for c in range(1, logs.shape[0]):
+        save_image_wo_normalization(logs[c,:,:], savepath + '_logits' + str(c) + '.png', 'jet')
+        save_image_wo_normalization(probs[c,:,:], savepath + '_probs' + str(c) + '.png', 'jet')
+
+    return 0
+
 # ==========================================================
 # ==========================================================
-def save_image_wo_normalization(image, savepath):
+def save_image_wo_normalization(image,
+                                savepath,
+                                cmap = 'gray'):
     
     plt.figure(figsize=(5, 5))
-    k=0
-    plt.imshow(image, cmap = 'gray')
-    plt.colorbar()
+    if cmap != None:
+        plt.imshow(image, cmap = cmap)
+    else:
+        plt.imshow(image)
+    plt.axis('off')
     plt.savefig(savepath, bbox_inches='tight', dpi=50)
     plt.close()
     return 0
 
 # ==========================================================
 # ==========================================================
-def save_image(image, savepath):
+def save_image(image, savepath, cmap = 'gray'):
     
-    plt.figure(figsize=(5, 4))
+    plt.figure(figsize=(5, 5))
     k=0
-    plt.imshow(np.rot90(normalize_img_for_vis(image), k), cmap = 'gray')
+    plt.imshow(np.rot90(normalize_img_for_vis(image), k), cmap = cmap)
     plt.xticks(visible=False)
     plt.yticks(visible=False)
     plt.savefig(savepath, bbox_inches='tight', dpi=50)

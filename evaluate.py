@@ -221,6 +221,7 @@ if __name__ == "__main__":
     logging.info('depth dimensions of these test subjects: ' + str(depths_ts))
     subject_dices = []
     subject_eces = []
+    subject_taces = []
     
     images_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
     labels_all = np.zeros((num_subjects_ts, images_ts.shape[0], images_ts.shape[1]))
@@ -241,6 +242,18 @@ if __name__ == "__main__":
 
         # threshold probability
         hard_prediction = np.argmax(soft_prediction, axis = 1).astype(np.float32)
+
+        # ===================
+        # visualize results
+        # ===================
+        save_heatmaps = True
+        if save_heatmaps == True:
+            utils_vis.save_results_zoom(subject_image,
+                                        subject_label,
+                                        logits,
+                                        soft_prediction,
+                                        hard_prediction,
+                                        results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8'))
 
         # ===================
         # resolution scaling is needed for prostate datasets
@@ -271,22 +284,24 @@ if __name__ == "__main__":
                                                                             size = (data_test["nx"][sub], data_test["ny"][sub]),
                                                                             order = 0).astype(np.uint8)
             
-            compute_calibration_errors = True
-            if compute_calibration_errors == True:
-                # rescaling probs has the possibility of changing their sum across classes to not be 1
-                # rescale logits instead
-                # either way, however, rescaling will change the calibration to some extent
-                # to capture the differences between calibrations of different models, let's compute calibration errors without rescaling to the original resolution
+            # ===================
+            # compute calibration errors
+            # ===================
+            # rescaling probs has the possibility of changing their sum across classes to not be 1
+            # rescale logits instead
+            # either way, however, rescaling will change the calibration to some extent
+            # to capture the differences between calibrations of different models, let's compute calibration errors without rescaling to the original resolution
 
-                # compute calibration error
-                preds = np.swapaxes(np.swapaxes(soft_prediction, 1, 2), 2, 3)
-                preds = np.reshape(preds, [-1, args.num_labels])
+            # compute calibration error
+            preds = np.swapaxes(np.swapaxes(soft_prediction, 1, 2), 2, 3)
+            preds = np.reshape(preds, [-1, args.num_labels])
 
-                label = np.swapaxes(np.swapaxes(subject_label, 1, 2), 0, 1)
-                label = np.reshape(label, [-1, 1])
-                label = np.squeeze(label)
-                
-                subject_eces.append(utils_losses.ece_eval(preds, label, n_bins=15)[0])
+            label = np.swapaxes(np.swapaxes(subject_label, 1, 2), 0, 1)
+            label = np.reshape(label, [-1, 1])
+            label = np.squeeze(label)
+            
+            subject_eces.append(utils_losses.ece_eval(preds, label, n_bins=15)[0])
+            subject_taces.append(utils_losses.tace_eval(preds, label, n_bins=15)[0])
 
         elif args.dataset in ['placenta', 'ms']:
             hard_prediction_orig_res_and_size = hard_prediction
@@ -310,7 +325,7 @@ if __name__ == "__main__":
             utils_vis.save_results(image_orig,
                                    label_orig,
                                    hard_prediction_orig_res_and_size,
-                                   results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '.png')
+                                   results_path + args.test_sub_dataset + '_' + subject_name.decode('utf-8') + '_full.png')
 
         # ===================
         # compute dice
@@ -343,15 +358,6 @@ if __name__ == "__main__":
     # ===================
     # write quantitative results
     # ===================
-    write_results_to_file(results_path,
-                          args.test_sub_dataset,
-                          np.array(subject_dices),
-                          subject_names_ts,
-                          metric = 'dice')
-    
-    if compute_calibration_errors == True:
-        write_results_to_file(results_path,
-                              args.test_sub_dataset,
-                              np.array(subject_eces),
-                              subject_names_ts,
-                              metric = 'ece')
+    write_results_to_file(results_path, args.test_sub_dataset, np.array(subject_dices), subject_names_ts, metric = 'dice')
+    write_results_to_file(results_path, args.test_sub_dataset, np.array(subject_eces), subject_names_ts, metric = 'ece')    
+    write_results_to_file(results_path, args.test_sub_dataset, np.array(subject_taces), subject_names_ts, metric = 'tace', num_decimals = 5)
